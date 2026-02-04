@@ -4634,6 +4634,21 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   double _poissonAjusteElasticidade = 0.0;
   double _poissonPesoEficacia = 0.50;
   Map<String, dynamic>? _resultadoPoisson;
+  bool _nivelEnfrentamentoAtivo = false;
+  final Map<int, double> _nivelEnfrentamentoPesosAtaque = {};
+  final Map<int, double> _nivelEnfrentamentoPesosDefesa = {};
+  double _poissonGMMandanteBruto = 0.0;
+  double _poissonXGMandanteBruto = 0.0;
+  double _poissonGSMandanteBruto = 0.0;
+  double _poissonGMVisitanteBruto = 0.0;
+  double _poissonXGVisitanteBruto = 0.0;
+  double _poissonGSVisitanteBruto = 0.0;
+  double _poissonGMMandanteConsiderado = 0.0;
+  double _poissonXGMandanteConsiderado = 0.0;
+  double _poissonGSMandanteConsiderado = 0.0;
+  double _poissonGMVisitanteConsiderado = 0.0;
+  double _poissonXGVisitanteConsiderado = 0.0;
+  double _poissonGSVisitanteConsiderado = 0.0;
 
   // INTEGRAÇÃO SCOUT (Database)
   List<Map<String, dynamic>> _scoutPartidas = [];
@@ -4708,6 +4723,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     _carregarCardsConfianca();
     _carregarRascunhoConfianca();
     _carregarCardsPoisson();
+    _carregarConfigNivelEnfrentamento();
   }
 
   @override
@@ -4793,6 +4809,260 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     }
   }
 
+  Future<File> _getPoissonNivelEnfrentamentoFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File("${dir.path}/poisson_nivel_enfrentamento.json");
+  }
+
+  Future<void> _carregarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      if (await file.exists()) {
+        final data = await file.readAsString();
+        if (data.isNotEmpty) {
+          final json = jsonDecode(data) as Map<String, dynamic>;
+          final pesosAtaque = json['pesosAtaque'] ?? json['pesos'];
+          final pesosDefesa = json['pesosDefesa'] ?? json['pesos'];
+          setState(() {
+            _nivelEnfrentamentoAtivo = json['ativo'] == true;
+            _nivelEnfrentamentoPesosAtaque.clear();
+            _nivelEnfrentamentoPesosDefesa.clear();
+            if (pesosAtaque is Map) {
+              pesosAtaque.forEach((key, value) {
+                final pos = int.tryParse(key.toString());
+                final pct = (value as num?)?.toDouble();
+                if (pos != null && pct != null) {
+                  _nivelEnfrentamentoPesosAtaque[pos] = pct;
+                }
+              });
+            }
+            if (pesosDefesa is Map) {
+              pesosDefesa.forEach((key, value) {
+                final pos = int.tryParse(key.toString());
+                final pct = (value as num?)?.toDouble();
+                if (pos != null && pct != null) {
+                  _nivelEnfrentamentoPesosDefesa[pos] = pct;
+                }
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar nível de enfrentamento: $e");
+    }
+  }
+
+  Future<void> _salvarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      final json = {
+        'ativo': _nivelEnfrentamentoAtivo,
+        'pesosAtaque': _nivelEnfrentamentoPesosAtaque.map((key, value) => MapEntry(key.toString(), value)),
+        'pesosDefesa': _nivelEnfrentamentoPesosDefesa.map((key, value) => MapEntry(key.toString(), value)),
+      };
+      await file.writeAsString(jsonEncode(json));
+    } catch (e) {
+      debugPrint("Erro ao salvar nível de enfrentamento: $e");
+    }
+  }
+
+  double _pesoNivelEnfrentamentoAtaque(int? posicao) {
+    if (!_nivelEnfrentamentoAtivo || posicao == null || posicao <= 0) {
+      return 1.0;
+    }
+    final pct = _nivelEnfrentamentoPesosAtaque[posicao] ?? 100.0;
+    return (pct.clamp(0.0, 100.0)) / 100.0;
+  }
+
+  double _pesoNivelEnfrentamentoDefesa(int? posicao) {
+    if (!_nivelEnfrentamentoAtivo || posicao == null || posicao <= 0) {
+      return 1.0;
+    }
+    final pct = _nivelEnfrentamentoPesosDefesa[posicao] ?? 100.0;
+    return (pct.clamp(0.0, 100.0)) / 100.0;
+  }
+
+  List<Map<String, dynamic>> _gerarClassificacaoScout(String liga) {
+    final jogos = _scoutPartidas.where((p) => p['campeonato'] == liga).toList();
+    final Map<String, Map<String, dynamic>> tabela = {};
+
+    void initTime(String t) {
+      if (!tabela.containsKey(t)) {
+        tabela[t] = {'time': t, 'p': 0, 'j': 0, 'v': 0, 'e': 0, 'd': 0, 'gp': 0, 'gc': 0, 'sg': 0};
+      }
+    }
+
+    for (var p in jogos) {
+      final mand = p['mandante'].toString();
+      final vis = p['visitante'].toString();
+      final gm = (p['gm_casa'] as num).toInt();
+      final gv = (p['gm_fora'] as num).toInt();
+
+      initTime(mand);
+      initTime(vis);
+
+      tabela[mand]!['j']++;
+      tabela[mand]!['gp'] += gm;
+      tabela[mand]!['gc'] += gv;
+      tabela[mand]!['sg'] += (gm - gv);
+
+      tabela[vis]!['j']++;
+      tabela[vis]!['gp'] += gv;
+      tabela[vis]!['gc'] += gm;
+      tabela[vis]!['sg'] += (gv - gm);
+
+      if (gm > gv) {
+        tabela[mand]!['p'] += 3;
+        tabela[mand]!['v']++;
+        tabela[vis]!['d']++;
+      } else if (gv > gm) {
+        tabela[vis]!['p'] += 3;
+        tabela[vis]!['v']++;
+        tabela[mand]!['d']++;
+      } else {
+        tabela[mand]!['p'] += 1;
+        tabela[mand]!['e']++;
+        tabela[vis]!['p'] += 1;
+        tabela[vis]!['e']++;
+      }
+    }
+
+    final lista = tabela.values.toList();
+    lista.sort((a, b) {
+      if (b['p'] != a['p']) return b['p'].compareTo(a['p']);
+      if (b['v'] != a['v']) return b['v'].compareTo(a['v']);
+      if (b['sg'] != a['sg']) return b['sg'].compareTo(a['sg']);
+      return b['gp'].compareTo(a['gp']);
+    });
+
+    return lista;
+  }
+
+  Map<String, int> _mapaPosicoesLiga(String liga) {
+    final classificacao = _gerarClassificacaoScout(liga);
+    final posicoes = <String, int>{};
+    for (int i = 0; i < classificacao.length; i++) {
+      final time = classificacao[i]['time']?.toString() ?? '';
+      if (time.isNotEmpty) {
+        posicoes[time] = i + 1;
+      }
+    }
+    return posicoes;
+  }
+
+  Future<void> _abrirConfiguracaoNivelEnfrentamento() async {
+    final liga = _poissonCampeonatoCtrl.text.trim();
+    if (liga.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Selecione uma liga para definir o número de posições.")),
+      );
+      return;
+    }
+    final classificacao = _gerarClassificacaoScout(liga);
+    if (classificacao.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Sem dados suficientes para montar a tabela desta liga.")),
+      );
+      return;
+    }
+
+    final totalTimes = classificacao.length;
+    final Map<int, TextEditingController> ataqueCtrls = {};
+    final Map<int, TextEditingController> defesaCtrls = {};
+    for (int pos = 1; pos <= totalTimes; pos++) {
+      ataqueCtrls[pos] = TextEditingController(
+        text: (_nivelEnfrentamentoPesosAtaque[pos] ?? 100.0).toStringAsFixed(0),
+      );
+      defesaCtrls[pos] = TextEditingController(
+        text: (_nivelEnfrentamentoPesosDefesa[pos] ?? 100.0).toStringAsFixed(0),
+      );
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("Configurar Nível de Enfrentamento"),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: totalTimes,
+              itemBuilder: (context, index) {
+                final pos = index + 1;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6.0),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 70, child: Text("Pos $pos")),
+                      Expanded(
+                        child: TextField(
+                          controller: ataqueCtrls[pos],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: "% Ataque",
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: defesaCtrls[pos],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: "% Defesa",
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancelar"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  for (int pos = 1; pos <= totalTimes; pos++) {
+                    final ataqueVal = double.tryParse(ataqueCtrls[pos]!.text.replaceAll(',', '.'));
+                    final defesaVal = double.tryParse(defesaCtrls[pos]!.text.replaceAll(',', '.'));
+                    if (ataqueVal != null) {
+                      _nivelEnfrentamentoPesosAtaque[pos] = ataqueVal.clamp(0.0, 100.0);
+                    }
+                    if (defesaVal != null) {
+                      _nivelEnfrentamentoPesosDefesa[pos] = defesaVal.clamp(0.0, 100.0);
+                    }
+                  }
+                });
+                _salvarConfigNivelEnfrentamento();
+                _tentaPreencherDadosComScout();
+                Navigator.pop(ctx);
+              },
+              child: const Text("Salvar"),
+            ),
+          ],
+        );
+      },
+    );
+
+    for (final ctrl in ataqueCtrls.values) {
+      ctrl.dispose();
+    }
+    for (final ctrl in defesaCtrls.values) {
+      ctrl.dispose();
+    }
+  }
+
   void _tentaPreencherDadosComScout() {
     final liga = _poissonCampeonatoCtrl.text.trim();
     final mandante = _poissonMandanteCtrl.text.trim();
@@ -4814,6 +5084,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
 
     int contagemZero = 0;
     int contagemCaos = 0;
+    final posicoesLiga = _mapaPosicoesLiga(liga);
 
     int nCasa = int.tryParse(_poissonJogosMandanteCtrl.text) ?? 8;
     var jogosMandante = jogosLiga.where((p) => p['mandante'] == mandante).toList();
@@ -4821,21 +5092,45 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
 
     if (jogosMandante.isNotEmpty) {
       double sGM = 0, sXG = 0, sGS = 0;
+      double sGMBruto = 0, sXGBruto = 0, sGSBruto = 0;
       for (var p in jogosMandante) {
-        double gm = (p['gm_casa'] as num).toDouble();
-        double gs = (p['gm_fora'] as num).toDouble();
+        final gm = (p['gm_casa'] as num).toDouble();
+        final gs = (p['gm_fora'] as num).toDouble();
+        final xg = (p['xg_casa'] as num).toDouble();
+        final adversario = p['visitante']?.toString();
+        final posicao = posicoesLiga[adversario];
+        final pesoAtaque = _pesoNivelEnfrentamentoAtaque(posicao);
+        final pesoDefesa = _pesoNivelEnfrentamentoDefesa(posicao);
 
-        sGM += gm;
-        sXG += (p['xg_casa'] as num).toDouble();
-        sGS += gs;
+        sGMBruto += gm;
+        sXGBruto += xg;
+        sGSBruto += gs;
 
-        double totalGolsJogo = gm + gs;
+        sGM += gm * pesoAtaque;
+        sXG += xg * pesoAtaque;
+        sGS += gs * pesoDefesa;
+
+        final totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
       }
-      _poissonGMMandanteCtrl.text = sGM.toInt().toString();
-      _poissonXGMandanteCtrl.text = sXG.toStringAsFixed(2);
-      _poissonGSMandanteCtrl.text = sGS.toInt().toString();
+      _poissonGMMandanteBruto = sGMBruto;
+      _poissonXGMandanteBruto = sXGBruto;
+      _poissonGSMandanteBruto = sGSBruto;
+      _poissonGMMandanteConsiderado = sGM;
+      _poissonXGMandanteConsiderado = sXG;
+      _poissonGSMandanteConsiderado = sGS;
+
+      _poissonGMMandanteCtrl.text = _nivelEnfrentamentoAtivo ? sGM.toStringAsFixed(2) : sGMBruto.toInt().toString();
+      _poissonXGMandanteCtrl.text = _nivelEnfrentamentoAtivo ? sXG.toStringAsFixed(2) : sXGBruto.toStringAsFixed(2);
+      _poissonGSMandanteCtrl.text = _nivelEnfrentamentoAtivo ? sGS.toStringAsFixed(2) : sGSBruto.toInt().toString();
+    } else {
+      _poissonGMMandanteBruto = 0.0;
+      _poissonXGMandanteBruto = 0.0;
+      _poissonGSMandanteBruto = 0.0;
+      _poissonGMMandanteConsiderado = 0.0;
+      _poissonXGMandanteConsiderado = 0.0;
+      _poissonGSMandanteConsiderado = 0.0;
     }
 
     int nFora = int.tryParse(_poissonJogosVisitanteCtrl.text) ?? 8;
@@ -4844,21 +5139,45 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
 
     if (jogosVisitante.isNotEmpty) {
       double sGM = 0, sXG = 0, sGS = 0;
+      double sGMBruto = 0, sXGBruto = 0, sGSBruto = 0;
       for (var p in jogosVisitante) {
-        double gm = (p['gm_fora'] as num).toDouble();
-        double gs = (p['gm_casa'] as num).toDouble();
+        final gm = (p['gm_fora'] as num).toDouble();
+        final gs = (p['gm_casa'] as num).toDouble();
+        final xg = (p['xg_fora'] as num).toDouble();
+        final adversario = p['mandante']?.toString();
+        final posicao = posicoesLiga[adversario];
+        final pesoAtaque = _pesoNivelEnfrentamentoAtaque(posicao);
+        final pesoDefesa = _pesoNivelEnfrentamentoDefesa(posicao);
 
-        sGM += gm;
-        sXG += (p['xg_fora'] as num).toDouble();
-        sGS += gs;
+        sGMBruto += gm;
+        sXGBruto += xg;
+        sGSBruto += gs;
 
-        double totalGolsJogo = gm + gs;
+        sGM += gm * pesoAtaque;
+        sXG += xg * pesoAtaque;
+        sGS += gs * pesoDefesa;
+
+        final totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
       }
-      _poissonGMVisitanteCtrl.text = sGM.toInt().toString();
-      _poissonXGVisitanteCtrl.text = sXG.toStringAsFixed(2);
-      _poissonGSVisitanteCtrl.text = sGS.toInt().toString();
+      _poissonGMVisitanteBruto = sGMBruto;
+      _poissonXGVisitanteBruto = sXGBruto;
+      _poissonGSVisitanteBruto = sGSBruto;
+      _poissonGMVisitanteConsiderado = sGM;
+      _poissonXGVisitanteConsiderado = sXG;
+      _poissonGSVisitanteConsiderado = sGS;
+
+      _poissonGMVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? sGM.toStringAsFixed(2) : sGMBruto.toInt().toString();
+      _poissonXGVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? sXG.toStringAsFixed(2) : sXGBruto.toStringAsFixed(2);
+      _poissonGSVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? sGS.toStringAsFixed(2) : sGSBruto.toInt().toString();
+    } else {
+      _poissonGMVisitanteBruto = 0.0;
+      _poissonXGVisitanteBruto = 0.0;
+      _poissonGSVisitanteBruto = 0.0;
+      _poissonGMVisitanteConsiderado = 0.0;
+      _poissonXGVisitanteConsiderado = 0.0;
+      _poissonGSVisitanteConsiderado = 0.0;
     }
 
     final ajusteZeroPassos = contagemZero ~/ 2;
@@ -7023,6 +7342,14 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
               ),
             ],
           ),
+          if (_nivelEnfrentamentoAtivo && _poissonGMMandanteBruto > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              "Considerado (peso): GM ${_poissonGMMandanteConsiderado.toStringAsFixed(2)} | xG ${_poissonXGMandanteConsiderado.toStringAsFixed(2)} | GS ${_poissonGSMandanteConsiderado.toStringAsFixed(2)} "
+              "(bruto: GM ${_poissonGMMandanteBruto.toStringAsFixed(2)} | xG ${_poissonXGMandanteBruto.toStringAsFixed(2)} | GS ${_poissonGSMandanteBruto.toStringAsFixed(2)})",
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+          ],
 
           const SizedBox(height: 12),
 
@@ -7054,6 +7381,36 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
                 ),
               ),
             ],
+          ),
+          if (_nivelEnfrentamentoAtivo && _poissonGMVisitanteBruto > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              "Considerado (peso): GM ${_poissonGMVisitanteConsiderado.toStringAsFixed(2)} | xG ${_poissonXGVisitanteConsiderado.toStringAsFixed(2)} | GS ${_poissonGSVisitanteConsiderado.toStringAsFixed(2)} "
+              "(bruto: GM ${_poissonGMVisitanteBruto.toStringAsFixed(2)} | xG ${_poissonXGVisitanteBruto.toStringAsFixed(2)} | GS ${_poissonGSVisitanteBruto.toStringAsFixed(2)})",
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+          ],
+
+          const Divider(height: 30),
+          const Text("🛡️ Nível de Enfrentamento"),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            value: _nivelEnfrentamentoAtivo,
+            title: const Text("Ativar ajuste por posição do adversário"),
+            subtitle: const Text("Quando ativo, aplica pesos distintos para ataque (gols/xG) e defesa (gols sofridos)."),
+            onChanged: (v) {
+              setState(() => _nivelEnfrentamentoAtivo = v);
+              _salvarConfigNivelEnfrentamento();
+              _tentaPreencherDadosComScout();
+            },
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _abrirConfiguracaoNivelEnfrentamento,
+              icon: const Icon(Icons.tune),
+              label: const Text("Ajustar pesos por posição"),
+            ),
           ),
 
           const Divider(height: 30),
@@ -14276,6 +14633,9 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   static const double _poissonFatorLigaPadrao = 1.00;
   static const double _poissonSuavizacaoPadrao = 0.75;
   static const double _poissonPesoEficaciaPadrao = 0.50;
+  bool _nivelEnfrentamentoAtivo = false;
+  final Map<int, double> _nivelEnfrentamentoPesosAtaque = {};
+  final Map<int, double> _nivelEnfrentamentoPesosDefesa = {};
 
   @override
   void initState() {
@@ -14284,6 +14644,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     _tabController = TabController(length: 5, vsync: this);
     _carregarDatabase();
     _carregarRegistrosPoissonScout();
+    _carregarConfigNivelEnfrentamento();
   }
 
   @override
@@ -14375,6 +14736,66 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     } catch (e) {
       debugPrint("Erro ao salvar registros Poisson Scout: $e");
     }
+  }
+
+  Future<File> _getPoissonNivelEnfrentamentoFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File("${dir.path}/poisson_nivel_enfrentamento.json");
+  }
+
+  Future<void> _carregarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      if (await file.exists()) {
+        final data = await file.readAsString();
+        if (data.isNotEmpty) {
+          final json = jsonDecode(data) as Map<String, dynamic>;
+          final pesosAtaque = json['pesosAtaque'] ?? json['pesos'];
+          final pesosDefesa = json['pesosDefesa'] ?? json['pesos'];
+          setState(() {
+            _nivelEnfrentamentoAtivo = json['ativo'] == true;
+            _nivelEnfrentamentoPesosAtaque.clear();
+            _nivelEnfrentamentoPesosDefesa.clear();
+            if (pesosAtaque is Map) {
+              pesosAtaque.forEach((key, value) {
+                final pos = int.tryParse(key.toString());
+                final pct = (value as num?)?.toDouble();
+                if (pos != null && pct != null) {
+                  _nivelEnfrentamentoPesosAtaque[pos] = pct;
+                }
+              });
+            }
+            if (pesosDefesa is Map) {
+              pesosDefesa.forEach((key, value) {
+                final pos = int.tryParse(key.toString());
+                final pct = (value as num?)?.toDouble();
+                if (pos != null && pct != null) {
+                  _nivelEnfrentamentoPesosDefesa[pos] = pct;
+                }
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar nível de enfrentamento: $e");
+    }
+  }
+
+  double _pesoNivelEnfrentamentoAtaque(int? posicao) {
+    if (!_nivelEnfrentamentoAtivo || posicao == null || posicao <= 0) {
+      return 1.0;
+    }
+    final pct = _nivelEnfrentamentoPesosAtaque[posicao] ?? 100.0;
+    return (pct.clamp(0.0, 100.0)) / 100.0;
+  }
+
+  double _pesoNivelEnfrentamentoDefesa(int? posicao) {
+    if (!_nivelEnfrentamentoAtivo || posicao == null || posicao <= 0) {
+      return 1.0;
+    }
+    final pct = _nivelEnfrentamentoPesosDefesa[posicao] ?? 100.0;
+    return (pct.clamp(0.0, 100.0)) / 100.0;
   }
 
   Future<void> _salvarDatabase() async {
@@ -14855,22 +15276,39 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       return null;
     }
 
+    final posicoesLiga = _mapaPosicoesLiga(camp);
     double somaGMandante = 0;
     double somaXGMandante = 0;
     double somaGSMandante = 0;
     for (var p in jogosMandante) {
-      somaGMandante += (p['gm_casa'] as num).toDouble();
-      somaXGMandante += (p['xg_casa'] as num).toDouble();
-      somaGSMandante += (p['gm_fora'] as num).toDouble();
+      final gm = (p['gm_casa'] as num).toDouble();
+      final xg = (p['xg_casa'] as num).toDouble();
+      final gs = (p['gm_fora'] as num).toDouble();
+      final adversario = p['visitante']?.toString();
+      final posicao = posicoesLiga[adversario];
+      final pesoAtaque = _pesoNivelEnfrentamentoAtaque(posicao);
+      final pesoDefesa = _pesoNivelEnfrentamentoDefesa(posicao);
+
+      somaGMandante += gm * pesoAtaque;
+      somaXGMandante += xg * pesoAtaque;
+      somaGSMandante += gs * pesoDefesa;
     }
 
     double somaGVisitante = 0;
     double somaXGVisitante = 0;
     double somaGSVisitante = 0;
     for (var p in jogosVisitante) {
-      somaGVisitante += (p['gm_fora'] as num).toDouble();
-      somaXGVisitante += (p['xg_fora'] as num).toDouble();
-      somaGSVisitante += (p['gm_casa'] as num).toDouble();
+      final gm = (p['gm_fora'] as num).toDouble();
+      final xg = (p['xg_fora'] as num).toDouble();
+      final gs = (p['gm_casa'] as num).toDouble();
+      final adversario = p['mandante']?.toString();
+      final posicao = posicoesLiga[adversario];
+      final pesoAtaque = _pesoNivelEnfrentamentoAtaque(posicao);
+      final pesoDefesa = _pesoNivelEnfrentamentoDefesa(posicao);
+
+      somaGVisitante += gm * pesoAtaque;
+      somaXGVisitante += xg * pesoAtaque;
+      somaGSVisitante += gs * pesoDefesa;
     }
 
     final jogosLiga = _todasPartidas.where((p) => p['campeonato'] == camp).toList();
@@ -15433,6 +15871,18 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     });
 
     return lista;
+  }
+
+  Map<String, int> _mapaPosicoesLiga(String camp) {
+    final classificacao = _gerarClassificacao(camp);
+    final posicoes = <String, int>{};
+    for (int i = 0; i < classificacao.length; i++) {
+      final time = classificacao[i]['time']?.toString() ?? '';
+      if (time.isNotEmpty) {
+        posicoes[time] = i + 1;
+      }
+    }
+    return posicoes;
   }
 
   // CALCULA STATS PARA O CARD DE POISSON
