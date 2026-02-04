@@ -14237,6 +14237,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   List<Map<String, dynamic>> _todasPartidas = [];
   List<String> _listaCampeonatos = [];
   Set<String> _campeonatosArquivados = {};
+  List<Map<String, dynamic>> _registrosPoissonScout = [];
 
   // Estado Atual
   String? _campeonatoSelecionado;
@@ -14268,12 +14269,19 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
 
   bool _carregando = true;
 
+  static const int _janelaPoissonScout = 8;
+  static const double _poissonFatorCasaPadrao = 0.10;
+  static const double _poissonFatorLigaPadrao = 1.00;
+  static const double _poissonSuavizacaoPadrao = 0.75;
+  static const double _poissonPesoEficaciaPadrao = 0.50;
+
   @override
   void initState() {
     super.initState();
     // 4 Abas: Jogos, Times (Monitor), Tabela, Stats
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _carregarDatabase();
+    _carregarRegistrosPoissonScout();
   }
 
   @override
@@ -14333,6 +14341,37 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       debugPrint("Erro load DB: $e");
     } finally {
       if (mounted) setState(() => _carregando = false);
+    }
+  }
+
+  Future<File> _getPoissonScoutFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File("${dir.path}/scout_poisson_registros.json");
+  }
+
+  Future<void> _carregarRegistrosPoissonScout() async {
+    try {
+      final file = await _getPoissonScoutFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          setState(() {
+            _registrosPoissonScout = (jsonDecode(content) as List).cast<Map<String, dynamic>>();
+            _registrosPoissonScout.sort((a, b) => (b['data'] ?? '').compareTo(a['data'] ?? ''));
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar registros Poisson Scout: $e");
+    }
+  }
+
+  Future<void> _salvarRegistrosPoissonScout() async {
+    try {
+      final file = await _getPoissonScoutFile();
+      await file.writeAsString(jsonEncode(_registrosPoissonScout));
+    } catch (e) {
+      debugPrint("Erro ao salvar registros Poisson Scout: $e");
     }
   }
 
@@ -14397,6 +14436,11 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
             partida['campeonato'] = novoNome;
           }
         }
+        for (var registro in _registrosPoissonScout) {
+          if (registro['campeonato'] == antigoNome) {
+            registro['campeonato'] = novoNome;
+          }
+        }
         if (_campeonatosArquivados.contains(antigoNome)) {
           _campeonatosArquivados.remove(antigoNome);
           _campeonatosArquivados.add(novoNome);
@@ -14407,6 +14451,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       });
 
       await _salvarDatabase();
+      await _salvarRegistrosPoissonScout();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -14467,6 +14512,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     if (confirma == true) {
       setState(() {
         _todasPartidas.removeWhere((p) => p['campeonato'] == nomeCamp);
+        _registrosPoissonScout.removeWhere((r) => r['campeonato'] == nomeCamp);
         _campeonatosArquivados.remove(nomeCamp);
 
         if (_campeonatoSelecionado == nomeCamp) {
@@ -14475,6 +14521,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       });
 
       await _salvarDatabase();
+      await _salvarRegistrosPoissonScout();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -14657,6 +14704,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     }
 
     // Prossegue com salvamento
+    final isEdicao = _idEmEdicao != null;
     final novaPartida = {
       'id': _idEmEdicao ?? DateTime.now().millisecondsSinceEpoch.toString(),
       'data': _dataJogo.toIso8601String(),
@@ -14673,13 +14721,19 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       'cantos_fora': double.tryParse(checkZero(_cantosVisitanteCtrl.text).replaceAll(',', '.')) ?? 0.0,
     };
 
+    final registroPoisson = isEdicao ? null : _gerarRegistroPoissonParaPartida(novaPartida);
+
     setState(() {
-      if (_idEmEdicao != null) {
+      if (isEdicao) {
         final idx = _todasPartidas.indexWhere((p) => p['id'] == _idEmEdicao);
         if (idx != -1) _todasPartidas[idx] = novaPartida;
         _idEmEdicao = null;
+        _atualizarRegistroPoissonParaEdicao(novaPartida);
       } else {
         _todasPartidas.insert(0, novaPartida);
+        if (registroPoisson != null) {
+          _registrosPoissonScout.insert(0, registroPoisson);
+        }
       }
 
       if (!_listaCampeonatos.contains(novaPartida['campeonato'])) {
@@ -14689,6 +14743,16 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
 
     _limparFormulario(manterCamp: true);
     _salvarDatabase();
+    if (registroPoisson != null) {
+      _salvarRegistrosPoissonScout();
+    }
+    if (!isEdicao && registroPoisson == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Jogo registrado! Sem Poisson (mínimo de 8 jogos por time)."),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Jogo registrado!"), backgroundColor: Colors.green));
     }
@@ -14718,8 +14782,10 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   void _excluirPartida(String id) {
     setState(() {
       _todasPartidas.removeWhere((p) => p['id'].toString() == id);
+      _registrosPoissonScout.removeWhere((r) => r['matchId'].toString() == id);
     });
     _salvarDatabase();
+    _salvarRegistrosPoissonScout();
   }
 
   void _limparFormulario({bool manterCamp = false}) {
@@ -14756,6 +14822,477 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   List<Map<String, dynamic>> _getPartidasDoCampeonato(String? camp) {
     if (camp == null) return [];
     return _todasPartidas.where((p) => p['campeonato'] == camp).toList();
+  }
+
+  List<Map<String, dynamic>> _getUltimosJogosTime({
+    required String campeonato,
+    required String time,
+    required bool mandante,
+    int limite = _janelaPoissonScout,
+  }) {
+    final jogos = _todasPartidas
+        .where((p) => p['campeonato'] == campeonato && (mandante ? p['mandante'] == time : p['visitante'] == time))
+        .toList();
+    jogos.sort((a, b) => DateTime.parse(b['data']).compareTo(DateTime.parse(a['data'])));
+    if (jogos.length > limite) {
+      return jogos.sublist(0, limite);
+    }
+    return jogos;
+  }
+
+  Map<String, dynamic>? _gerarRegistroPoissonParaPartida(Map<String, dynamic> partida) {
+    final camp = partida['campeonato']?.toString() ?? '';
+    final mandante = partida['mandante']?.toString() ?? '';
+    final visitante = partida['visitante']?.toString() ?? '';
+    if (camp.isEmpty || mandante.isEmpty || visitante.isEmpty) return null;
+
+    final jogosMandante = _getUltimosJogosTime(campeonato: camp, time: mandante, mandante: true, limite: _janelaPoissonScout);
+    final jogosVisitante = _getUltimosJogosTime(campeonato: camp, time: visitante, mandante: false, limite: _janelaPoissonScout);
+
+    if (jogosMandante.length < _janelaPoissonScout || jogosVisitante.length < _janelaPoissonScout) {
+      return null;
+    }
+
+    double somaGMandante = 0;
+    double somaXGMandante = 0;
+    double somaGSMandante = 0;
+    for (var p in jogosMandante) {
+      somaGMandante += (p['gm_casa'] as num).toDouble();
+      somaXGMandante += (p['xg_casa'] as num).toDouble();
+      somaGSMandante += (p['gm_fora'] as num).toDouble();
+    }
+
+    double somaGVisitante = 0;
+    double somaXGVisitante = 0;
+    double somaGSVisitante = 0;
+    for (var p in jogosVisitante) {
+      somaGVisitante += (p['gm_fora'] as num).toDouble();
+      somaXGVisitante += (p['xg_fora'] as num).toDouble();
+      somaGSVisitante += (p['gm_casa'] as num).toDouble();
+    }
+
+    final jogosLiga = _todasPartidas.where((p) => p['campeonato'] == camp).toList();
+    double mediaLiga = 2.4;
+    if (jogosLiga.isNotEmpty) {
+      double totalGolsLiga = 0;
+      for (var p in jogosLiga) {
+        totalGolsLiga += ((p['gm_casa'] as num) + (p['gm_fora'] as num)).toDouble();
+      }
+      mediaLiga = totalGolsLiga / jogosLiga.length;
+    }
+
+    int contagemZero = 0;
+    int contagemCaos = 0;
+    final jogosParaAjuste = [...jogosMandante, ...jogosVisitante];
+    for (var p in jogosParaAjuste) {
+      final totalGols = ((p['gm_casa'] as num) + (p['gm_fora'] as num)).toDouble();
+      if (totalGols == 0) contagemZero++;
+      if (totalGols >= 6) contagemCaos++;
+    }
+
+    final ajusteZero = (contagemZero * 0.05).clamp(0.0, 0.30);
+    final ajusteElasticidade = (contagemCaos * 0.05).clamp(0.0, 0.30);
+
+    final resultado = _calcularPoissonScout(
+      mediaLiga: mediaLiga,
+      jogosMandante: _janelaPoissonScout.toDouble(),
+      jogosVisitante: _janelaPoissonScout.toDouble(),
+      gmMandante: somaGMandante,
+      xgMandante: somaXGMandante,
+      gsMandante: somaGSMandante,
+      gmVisitante: somaGVisitante,
+      xgVisitante: somaXGVisitante,
+      gsVisitante: somaGSVisitante,
+      fatorCasa: _poissonFatorCasaPadrao,
+      fatorLiga: _poissonFatorLigaPadrao,
+      suavizacao: _poissonSuavizacaoPadrao,
+      ajusteZero: ajusteZero,
+      ajusteElasticidade: ajusteElasticidade,
+      pesoEficacia: _poissonPesoEficaciaPadrao,
+    );
+
+    return {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'matchId': partida['id'],
+      'data': partida['data'],
+      'campeonato': camp,
+      'mandante': mandante,
+      'visitante': visitante,
+      'janela': _janelaPoissonScout,
+      'inputs': {
+        'mediaLiga': mediaLiga,
+        'gmMandante': somaGMandante,
+        'xgMandante': somaXGMandante,
+        'gsMandante': somaGSMandante,
+        'gmVisitante': somaGVisitante,
+        'xgVisitante': somaXGVisitante,
+        'gsVisitante': somaGSVisitante,
+      },
+      'ajustes': {
+        'fatorCasa': _poissonFatorCasaPadrao,
+        'fatorLiga': _poissonFatorLigaPadrao,
+        'suavizacao': _poissonSuavizacaoPadrao,
+        'ajusteZero': ajusteZero,
+        'ajusteElasticidade': ajusteElasticidade,
+        'pesoEficacia': _poissonPesoEficaciaPadrao,
+      },
+      'resultados': resultado,
+      'resultadoReal': {
+        'gm_casa': (partida['gm_casa'] as num).toDouble(),
+        'gm_fora': (partida['gm_fora'] as num).toDouble(),
+      },
+    };
+  }
+
+  void _atualizarRegistroPoissonParaEdicao(Map<String, dynamic> partida) {
+    final idx = _registrosPoissonScout.indexWhere((r) => r['matchId'].toString() == partida['id'].toString());
+    if (idx == -1) return;
+    _registrosPoissonScout[idx]['resultadoReal'] = {
+      'gm_casa': (partida['gm_casa'] as num).toDouble(),
+      'gm_fora': (partida['gm_fora'] as num).toDouble(),
+    };
+    _registrosPoissonScout[idx]['data'] = partida['data'];
+    _registrosPoissonScout[idx]['campeonato'] = partida['campeonato'];
+    _registrosPoissonScout[idx]['mandante'] = partida['mandante'];
+    _registrosPoissonScout[idx]['visitante'] = partida['visitante'];
+    _salvarRegistrosPoissonScout();
+  }
+
+  double _fatorial(int n) { double r = 1.0; for (int i = 2; i <= n; i++) r *= i; return r; }
+
+  double _pois(int k, double lambda) => exp(-lambda) * pow(lambda, k) / _fatorial(k);
+
+  Map<String, dynamic> _calcularProbabilidadesDeGols(Map<String, double> placares, double somaTotal) {
+    double pOver15 = 0; double pOver25 = 0; double pOver35 = 0; double pOver45 = 0; double pBTTS_Sim = 0;
+
+    placares.forEach((placar, prob) {
+      final parts = placar.split(' x ');
+      final hg = int.parse(parts[0]); final ag = int.parse(parts[1]);
+      final total = hg + ag;
+
+      if (total > 1.5) pOver15 += prob;
+      if (total > 2.5) pOver25 += prob;
+      if (total > 3.5) pOver35 += prob;
+      if (total > 4.5) pOver45 += prob;
+      if (hg > 0 && ag > 0) pBTTS_Sim += prob;
+    });
+
+    Map<String, dynamic> item(double p) {
+      double prob = p / somaTotal;
+      double odd = prob > 0 ? 1.0 / prob : 0.0;
+      return {'prob': prob, 'oddJusta': odd};
+    }
+
+    return {
+      'Over 1.5': item(pOver15),
+      'Under 1.5': item(somaTotal - pOver15),
+      'Over 2.5': item(pOver25),
+      'Under 2.5': item(somaTotal - pOver25),
+      'Over 3.5': item(pOver35),
+      'Under 3.5': item(somaTotal - pOver35),
+      'Over 4.5': item(pOver45),
+      'Under 4.5': item(somaTotal - pOver45),
+      'Ambos Marcam (Sim)': item(pBTTS_Sim),
+      'Ambos Marcam (Não)': item(somaTotal - pBTTS_Sim),
+    };
+  }
+
+  Map<String, dynamic> _calcularPoissonScout({
+    required double mediaLiga,
+    required double jogosMandante,
+    required double jogosVisitante,
+    required double gmMandante,
+    required double xgMandante,
+    required double gsMandante,
+    required double gmVisitante,
+    required double xgVisitante,
+    required double gsVisitante,
+    required double fatorCasa,
+    required double fatorLiga,
+    required double suavizacao,
+    required double ajusteZero,
+    required double ajusteElasticidade,
+    required double pesoEficacia,
+  }) {
+    final ligaMedia = mediaLiga;
+    final nCasa = jogosMandante.clamp(1, 100).toDouble();
+    final nFora = jogosVisitante.clamp(1, 100).toDouble();
+
+    final xgCasa = xgMandante == 0 ? gmMandante : xgMandante;
+    final xgFora = xgVisitante == 0 ? gmVisitante : xgVisitante;
+
+    final mGmCasaReal = (nCasa > 0) ? (gmMandante / nCasa) : 0.0;
+    final mXgCasaReal = (nCasa > 0) ? (xgCasa / nCasa) : 0.0;
+    final mGmCasa = (mGmCasaReal * pesoEficacia) + (mXgCasaReal * (1.0 - pesoEficacia));
+
+    final mGmForaReal = (nFora > 0) ? (gmVisitante / nFora) : 0.0;
+    final mXgForaReal = (nFora > 0) ? (xgFora / nFora) : 0.0;
+    final mGmFora = (mGmForaReal * pesoEficacia) + (mXgForaReal * (1.0 - pesoEficacia));
+
+    final mGsCasa = (nCasa > 0) ? (gsMandante / nCasa) : 0.0;
+    final mGsFora = (nFora > 0) ? (gsVisitante / nFora) : 0.0;
+
+    final ligaPorTime = (ligaMedia / 2.0) * fatorLiga;
+
+    final atkCasaRaw = (ligaPorTime > 0) ? (mGmCasa / ligaPorTime) : 1.0;
+    final defCasaRaw = (ligaPorTime > 0) ? (mGsCasa / ligaPorTime) : 1.0;
+    final atkForaRaw = (ligaPorTime > 0) ? (mGmFora / ligaPorTime) : 1.0;
+    final defForaRaw = (ligaPorTime > 0) ? (mGsFora / ligaPorTime) : 1.0;
+
+    final atkCasa = 1.0 + (atkCasaRaw - 1.0) * suavizacao;
+    final defCasa = 1.0 + (defCasaRaw - 1.0) * suavizacao;
+    final atkFora = 1.0 + (atkForaRaw - 1.0) * suavizacao;
+    final defFora = 1.0 + (defForaRaw - 1.0) * suavizacao;
+
+    double lambdaCasa = (ligaPorTime * atkCasa * defFora * (1 + fatorCasa)).clamp(0.05, 6.0);
+    double lambdaFora = (ligaPorTime * atkFora * defCasa).clamp(0.05, 6.0);
+
+    const maxGols = 7;
+    double pH = 0, pD = 0, pA = 0;
+    double bestP = -1;
+    int bestHG = 0, bestAG = 0;
+    final placares = <String, double>{};
+
+    for (int hg = 0; hg <= maxGols; hg++) {
+      final ph = _pois(hg, lambdaCasa);
+      for (int ag = 0; ag <= maxGols; ag++) {
+        final pa = _pois(ag, lambdaFora);
+        final joint = ph * pa;
+        placares["$hg x $ag"] = joint;
+      }
+    }
+
+    if (ajusteZero > 0.0) {
+      final p00Antigo = placares["0 x 0"] ?? 0.0;
+      double boost = ajusteZero;
+
+      if (p00Antigo + boost > 0.95) boost = 0.95 - p00Antigo;
+
+      final doadores = placares.keys.where((k) {
+        if (k == "0 x 0") return false;
+        final parts = k.split(' x ');
+        final totalGols = int.parse(parts[0]) + int.parse(parts[1]);
+        return totalGols >= 2;
+      }).toList();
+
+      double somaDoadores = 0.0;
+      for (var k in doadores) somaDoadores += placares[k]!;
+
+      if (somaDoadores > boost) {
+        final fatorReducao = (somaDoadores - boost) / somaDoadores;
+        for (var k in doadores) {
+          placares[k] = placares[k]! * fatorReducao;
+        }
+        placares["0 x 0"] = p00Antigo + boost;
+      } else {
+        double p00Novo = (p00Antigo + boost).clamp(0.0, 0.95);
+        double fatorReducao = 1.0;
+        if (p00Antigo < 1.0) fatorReducao = (1.0 - p00Novo) / (1.0 - p00Antigo);
+
+        placares.forEach((key, val) {
+          if (key == "0 x 0") placares[key] = p00Novo;
+          else placares[key] = val * fatorReducao;
+        });
+      }
+    }
+
+    if (ajusteElasticidade > 0.0) {
+      final boost = ajusteElasticidade;
+
+      final receivers = placares.keys.where((k) {
+        final parts = k.split(' x ');
+        return (int.parse(parts[0]) + int.parse(parts[1])) >= 4;
+      }).toList();
+
+      final donors = placares.keys.where((k) {
+        final parts = k.split(' x ');
+        final t = int.parse(parts[0]) + int.parse(parts[1]);
+        return t >= 1 && t <= 3;
+      }).toList();
+
+      double sumDonors = 0.0;
+      for (var k in donors) sumDonors += placares[k]!;
+
+      double sumReceivers = 0.0;
+      for (var k in receivers) sumReceivers += placares[k]!;
+
+      if (sumDonors > boost) {
+        double factorRed = (sumDonors - boost) / sumDonors;
+        for (var k in donors) placares[k] = placares[k]! * factorRed;
+
+        if (sumReceivers > 0) {
+          double factorInc = (sumReceivers + boost) / sumReceivers;
+          for (var k in receivers) placares[k] = placares[k]! * factorInc;
+        }
+      }
+    }
+
+    placares.forEach((key, val) {
+      if (val > bestP) {
+        bestP = val;
+        final parts = key.split(' x ');
+        bestHG = int.parse(parts[0]);
+        bestAG = int.parse(parts[1]);
+      }
+      final parts = key.split(' x ');
+      final hg = int.parse(parts[0]);
+      final ag = int.parse(parts[1]);
+      if (hg > ag) pH += val;
+      else if (hg == ag) pD += val;
+      else pA += val;
+    });
+
+    final somaTotalPlacares = pH + pD + pA;
+    final probCasa = pH / somaTotalPlacares;
+    final probEmpate = pD / somaTotalPlacares;
+    final probFora = pA / somaTotalPlacares;
+
+    final prob1X = probCasa + probEmpate;
+    final probX2 = probEmpate + probFora;
+    final prob12 = probCasa + probFora;
+
+    final probGols = _calcularProbabilidadesDeGols(placares, somaTotalPlacares);
+
+    double eficaciaCasa = (mXgCasaReal > 0) ? (mGmCasaReal / mXgCasaReal) : 1.0;
+    double eficaciaFora = (mXgForaReal > 0) ? (mGmForaReal / mXgForaReal) : 1.0;
+
+    return {
+      'lambdaCasa': lambdaCasa,
+      'lambdaFora': lambdaFora,
+      'pCasa': probCasa,
+      'pEmpate': probEmpate,
+      'pFora': probFora,
+      'p1X': prob1X,
+      'pX2': probX2,
+      'p12': prob12,
+      'placarProvavel': {'hg': bestHG, 'ag': bestAG, 'p': bestP},
+      'placares': placares,
+      'probGols': probGols,
+      'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora},
+    };
+  }
+
+  String _resultadoPrevisto(Map<String, dynamic> registro) {
+    final resultados = registro['resultados'] as Map<String, dynamic>;
+    final pCasa = (resultados['pCasa'] as num).toDouble();
+    final pEmpate = (resultados['pEmpate'] as num).toDouble();
+    final pFora = (resultados['pFora'] as num).toDouble();
+    if (pCasa >= pEmpate && pCasa >= pFora) return 'Casa';
+    if (pFora >= pCasa && pFora >= pEmpate) return 'Fora';
+    return 'Empate';
+  }
+
+  String _resultadoReal(Map<String, dynamic> registro) {
+    final real = registro['resultadoReal'] as Map<String, dynamic>;
+    final casa = (real['gm_casa'] as num).toDouble();
+    final fora = (real['gm_fora'] as num).toDouble();
+    if (casa > fora) return 'Casa';
+    if (fora > casa) return 'Fora';
+    return 'Empate';
+  }
+
+  Widget _buildAbaExpectativasPoisson() {
+    final registros = _registrosPoissonScout
+        .where((r) => _campeonatoSelecionado == null || r['campeonato'] == _campeonatoSelecionado)
+        .toList();
+    registros.sort((a, b) => (b['data'] ?? '').compareTo(a['data'] ?? ''));
+
+    if (registros.isEmpty) {
+      return const Center(child: Text("Nenhum registro Poisson encontrado para esta liga."));
+    }
+
+    int acertosResultado = 0;
+    int acertosPlacar = 0;
+    for (var r in registros) {
+      if (_resultadoPrevisto(r) == _resultadoReal(r)) {
+        acertosResultado++;
+      }
+      final placar = r['resultados']['placarProvavel'] as Map<String, dynamic>;
+      final real = r['resultadoReal'] as Map<String, dynamic>;
+      if ((placar['hg'] as num).toInt() == (real['gm_casa'] as num).toInt() &&
+          (placar['ag'] as num).toInt() == (real['gm_fora'] as num).toInt()) {
+        acertosPlacar++;
+      }
+    }
+
+    final total = registros.length;
+    final taxaAcerto = total > 0 ? (acertosResultado / total) * 100 : 0.0;
+    final taxaPlacar = total > 0 ? (acertosPlacar / total) * 100 : 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          color: Colors.indigo.shade50,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("📊 Precisão do Poisson (Últimos registros)", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text("Total analisado: $total jogos"),
+                Text("Acerto do resultado (1X2): $acertosResultado (${taxaAcerto.toStringAsFixed(1)}%)"),
+                Text("Acerto do placar exato: $acertosPlacar (${taxaPlacar.toStringAsFixed(1)}%)"),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...registros.map((r) {
+          final resultados = r['resultados'] as Map<String, dynamic>;
+          final placar = resultados['placarProvavel'] as Map<String, dynamic>;
+          final real = r['resultadoReal'] as Map<String, dynamic>;
+          final pCasa = (resultados['pCasa'] as num).toDouble();
+          final pEmpate = (resultados['pEmpate'] as num).toDouble();
+          final pFora = (resultados['pFora'] as num).toDouble();
+          final lambdaCasa = (resultados['lambdaCasa'] as num).toDouble();
+          final lambdaFora = (resultados['lambdaFora'] as num).toDouble();
+          final previsto = _resultadoPrevisto(r);
+          final realRes = _resultadoReal(r);
+          final acertou = previsto == realRes;
+          final data = DateTime.parse(r['data']);
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "${r['mandante']} x ${r['visitante']}",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(DateFormat('dd/MM/yyyy').format(data), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Chip(
+                        label: Text(acertou ? "Acertou Resultado ✅" : "Errou Resultado ❌"),
+                        backgroundColor: acertou ? Colors.green.shade100 : Colors.red.shade100,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text("Probabilidades: Casa ${(pCasa * 100).toStringAsFixed(1)}% | Empate ${(pEmpate * 100).toStringAsFixed(1)}% | Fora ${(pFora * 100).toStringAsFixed(1)}%"),
+                  Text("Gols esperados (λ): ${lambdaCasa.toStringAsFixed(2)} x ${lambdaFora.toStringAsFixed(2)}"),
+                  const SizedBox(height: 6),
+                  Text("Placar provável: ${placar['hg']} x ${placar['ag']} (p ${((placar['p'] as num) * 100).toStringAsFixed(1)}%)"),
+                  Text("Placar real: ${(real['gm_casa'] as num).toInt()} x ${(real['gm_fora'] as num).toInt()}"),
+                  Text("Resultado previsto: $previsto | Resultado real: $realRes", style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
   }
 
   List<String> _getCampeonatosAtivos() {
@@ -14903,6 +15440,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
             Tab(text: "Times", icon: Icon(Icons.radar)),
             Tab(text: "Tabela", icon: Icon(Icons.format_list_numbered)),
             Tab(text: "Stats", icon: Icon(Icons.analytics)),
+            Tab(text: "Poisson", icon: Icon(Icons.auto_graph)),
           ],
         ),
         actions: [
@@ -14956,6 +15494,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
           _buildAbaTimes(),
           _buildAbaTabela(),
           _buildAbaAnalise(),
+          _buildAbaExpectativasPoisson(),
         ],
       ),
       floatingActionButton: _tabController.index == 0
