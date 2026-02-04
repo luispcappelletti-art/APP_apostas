@@ -17,8 +17,8 @@ import 'package:intl/intl.dart';
 import 'dart:math';
 import 'package:intl/date_symbol_data_local.dart';
 
-// Versão placar na tela de pesquisa OK
-
+// Versão Scout com poisson OK, com analise da efetividade
+// Iniciando poisson com nível de enfretamento
 
 // Ponto de entrada da aplicação.
 void main() async {
@@ -4627,7 +4627,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   final TextEditingController _poissonOddForaCtrl = TextEditingController();
 
   // Variáveis de estado da Aba "Poisson Manual Pro"
-  double _poissonFatorCasa = 0.10;
+  double _poissonFatorCasa = 0.0;
   double _poissonFatorLiga = 1.00;
   double _poissonSuavizacao = 0.75;
   double _poissonAjusteZero = 0.0;
@@ -4861,8 +4861,10 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonGSVisitanteCtrl.text = sGS.toInt().toString();
     }
 
-    double novoAjusteZero = (contagemZero * 0.05).clamp(0.0, 0.30);
-    double novoAjusteCaos = (contagemCaos * 0.05).clamp(0.0, 0.30);
+    final ajusteZeroPassos = contagemZero ~/ 2;
+    final ajusteCaosPassos = contagemCaos ~/ 2;
+    double novoAjusteZero = (ajusteZeroPassos * 0.05).clamp(0.0, 0.30);
+    double novoAjusteCaos = (ajusteCaosPassos * 0.05).clamp(0.0, 0.30);
 
     _poissonAjusteZero = novoAjusteZero;
     _poissonAjusteElasticidade = novoAjusteCaos;
@@ -5063,7 +5065,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonOddEmpateCtrl.text = inputs['oddEmpate'] ?? '';
       _poissonOddForaCtrl.text = inputs['oddFora'] ?? '';
 
-      _poissonFatorCasa = (ajustes['fatorCasa'] as num?)?.toDouble() ?? 0.10;
+      _poissonFatorCasa = (ajustes['fatorCasa'] as num?)?.toDouble() ?? 0.0;
       _poissonFatorLiga = (ajustes['fatorLiga'] as num?)?.toDouble() ?? 1.00;
       _poissonSuavizacao = (ajustes['suavizacao'] as num?)?.toDouble() ?? 0.75;
       _poissonAjusteZero = (ajustes['ajusteZero'] as num?)?.toDouble() ?? 0.0;
@@ -5102,7 +5104,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonOddForaCtrl.clear();
 
       // Reseta sliders para os valores default
-      _poissonFatorCasa = 0.10;
+      _poissonFatorCasa = 0.0;
       _poissonFatorLiga = 1.00;
       _poissonSuavizacao = 0.75;
       _poissonAjusteZero = 0.0;
@@ -14270,7 +14272,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   bool _carregando = true;
 
   static const int _janelaPoissonScout = 8;
-  static const double _poissonFatorCasaPadrao = 0.10;
+  static const double _poissonFatorCasaPadrao = 0.0;
   static const double _poissonFatorLigaPadrao = 1.00;
   static const double _poissonSuavizacaoPadrao = 0.75;
   static const double _poissonPesoEficaciaPadrao = 0.50;
@@ -14890,8 +14892,10 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       if (totalGols >= 6) contagemCaos++;
     }
 
-    final ajusteZero = (contagemZero * 0.05).clamp(0.0, 0.30);
-    final ajusteElasticidade = (contagemCaos * 0.05).clamp(0.0, 0.30);
+    final ajusteZeroPassos = contagemZero ~/ 2;
+    final ajusteCaosPassos = contagemCaos ~/ 2;
+    final ajusteZero = (ajusteZeroPassos * 0.05).clamp(0.0, 0.30);
+    final ajusteElasticidade = (ajusteCaosPassos * 0.05).clamp(0.0, 0.30);
 
     final resultado = _calcularPoissonScout(
       mediaLiga: mediaLiga,
@@ -15203,21 +15207,65 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
 
     int acertosResultado = 0;
     int acertosPlacar = 0;
+    double somaConfiancaPrevista = 0.0;
+    double somaProbReal = 0.0;
+    double somaBrier = 0.0;
+    double somaLogLoss = 0.0;
+    double somaErroGols = 0.0;
+    double somaErroPlacar = 0.0;
     for (var r in registros) {
+      final resultados = r['resultados'] as Map<String, dynamic>;
+      final placar = resultados['placarProvavel'] as Map<String, dynamic>;
+      final real = r['resultadoReal'] as Map<String, dynamic>;
+      final pCasa = (resultados['pCasa'] as num).toDouble();
+      final pEmpate = (resultados['pEmpate'] as num).toDouble();
+      final pFora = (resultados['pFora'] as num).toDouble();
+      final realCasa = (real['gm_casa'] as num).toInt();
+      final realFora = (real['gm_fora'] as num).toInt();
+
       if (_resultadoPrevisto(r) == _resultadoReal(r)) {
         acertosResultado++;
       }
-      final placar = r['resultados']['placarProvavel'] as Map<String, dynamic>;
-      final real = r['resultadoReal'] as Map<String, dynamic>;
-      if ((placar['hg'] as num).toInt() == (real['gm_casa'] as num).toInt() &&
-          (placar['ag'] as num).toInt() == (real['gm_fora'] as num).toInt()) {
+      if ((placar['hg'] as num).toInt() == realCasa &&
+          (placar['ag'] as num).toInt() == realFora) {
         acertosPlacar++;
       }
+
+      final maiorProb = [pCasa, pEmpate, pFora].reduce(max);
+      somaConfiancaPrevista += maiorProb;
+
+      final resultadoReal = _resultadoReal(r);
+      final pReal = resultadoReal == 'Casa'
+          ? pCasa
+          : resultadoReal == 'Fora'
+          ? pFora
+          : pEmpate;
+      somaProbReal += pReal;
+      somaLogLoss += -log(pReal.clamp(1e-6, 1.0));
+
+      final oCasa = resultadoReal == 'Casa' ? 1.0 : 0.0;
+      final oEmpate = resultadoReal == 'Empate' ? 1.0 : 0.0;
+      final oFora = resultadoReal == 'Fora' ? 1.0 : 0.0;
+      somaBrier += pow(pCasa - oCasa, 2) + pow(pEmpate - oEmpate, 2) + pow(pFora - oFora, 2);
+
+      final lambdaCasa = (resultados['lambdaCasa'] as num).toDouble();
+      final lambdaFora = (resultados['lambdaFora'] as num).toDouble();
+      final totalEsperado = lambdaCasa + lambdaFora;
+      final totalReal = realCasa + realFora;
+      somaErroGols += (totalEsperado - totalReal).abs();
+      somaErroPlacar += ((placar['hg'] as num).toInt() - realCasa).abs() +
+          ((placar['ag'] as num).toInt() - realFora).abs();
     }
 
     final total = registros.length;
     final taxaAcerto = total > 0 ? (acertosResultado / total) * 100 : 0.0;
     final taxaPlacar = total > 0 ? (acertosPlacar / total) * 100 : 0.0;
+    final mediaConfianca = total > 0 ? (somaConfiancaPrevista / total) * 100 : 0.0;
+    final mediaProbReal = total > 0 ? (somaProbReal / total) * 100 : 0.0;
+    final mediaBrier = total > 0 ? somaBrier / total : 0.0;
+    final mediaLogLoss = total > 0 ? somaLogLoss / total : 0.0;
+    final mediaErroGols = total > 0 ? somaErroGols / total : 0.0;
+    final mediaErroPlacar = total > 0 ? somaErroPlacar / total : 0.0;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -15234,6 +15282,26 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
                 Text("Total analisado: $total jogos"),
                 Text("Acerto do resultado (1X2): $acertosResultado (${taxaAcerto.toStringAsFixed(1)}%)"),
                 Text("Acerto do placar exato: $acertosPlacar (${taxaPlacar.toStringAsFixed(1)}%)"),
+                Text("Confiança média (maior prob.): ${mediaConfianca.toStringAsFixed(1)}%"),
+                Text("Prob. média do resultado real: ${mediaProbReal.toStringAsFixed(1)}%"),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          color: Colors.blueGrey.shade50,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("📈 Métricas de calibração", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text("Brier Score (1X2): ${mediaBrier.toStringAsFixed(3)}"),
+                Text("Log Loss (1X2): ${mediaLogLoss.toStringAsFixed(3)}"),
+                Text("Erro médio de gols (λ vs real): ${mediaErroGols.toStringAsFixed(2)}"),
+                Text("Erro médio de placar (gols): ${mediaErroPlacar.toStringAsFixed(2)}"),
               ],
             ),
           ),
@@ -15251,7 +15319,15 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
           final previsto = _resultadoPrevisto(r);
           final realRes = _resultadoReal(r);
           final acertou = previsto == realRes;
+          final maiorProb = [pCasa, pEmpate, pFora].reduce(max);
+          final pReal = realRes == 'Casa'
+              ? pCasa
+              : realRes == 'Fora'
+              ? pFora
+              : pEmpate;
           final data = DateTime.parse(r['data']);
+          final erroPlacar = ((placar['hg'] as num).toInt() - (real['gm_casa'] as num).toInt()).abs() +
+              ((placar['ag'] as num).toInt() - (real['gm_fora'] as num).toInt()).abs();
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -15281,11 +15357,13 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
                   ),
                   const SizedBox(height: 8),
                   Text("Probabilidades: Casa ${(pCasa * 100).toStringAsFixed(1)}% | Empate ${(pEmpate * 100).toStringAsFixed(1)}% | Fora ${(pFora * 100).toStringAsFixed(1)}%"),
+                  Text("Confiança prevista: ${(maiorProb * 100).toStringAsFixed(1)}% | Prob. do real: ${(pReal * 100).toStringAsFixed(1)}%"),
                   Text("Gols esperados (λ): ${lambdaCasa.toStringAsFixed(2)} x ${lambdaFora.toStringAsFixed(2)}"),
                   const SizedBox(height: 6),
                   Text("Placar provável: ${placar['hg']} x ${placar['ag']} (p ${((placar['p'] as num) * 100).toStringAsFixed(1)}%)"),
                   Text("Placar real: ${(real['gm_casa'] as num).toInt()} x ${(real['gm_fora'] as num).toInt()}"),
                   Text("Resultado previsto: $previsto | Resultado real: $realRes", style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  Text("Erro de placar (gols): $erroPlacar", style: const TextStyle(fontSize: 12, color: Colors.black54)),
                 ],
               ),
             ),
