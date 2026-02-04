@@ -4634,6 +4634,9 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   double _poissonAjusteElasticidade = 0.0;
   double _poissonPesoEficacia = 0.50;
   Map<String, dynamic>? _resultadoPoisson;
+  bool _nivelEnfrentamentoAtivo = false;
+  final Map<int, double> _nivelEnfrentamentoPesos = {};
+  final Map<int, TextEditingController> _nivelEnfrentamentoCtrls = {};
 
   // INTEGRAÇÃO SCOUT (Database)
   List<Map<String, dynamic>> _scoutPartidas = [];
@@ -4708,6 +4711,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     _carregarCardsConfianca();
     _carregarRascunhoConfianca();
     _carregarCardsPoisson();
+    _carregarConfigNivelEnfrentamento();
   }
 
   @override
@@ -4738,6 +4742,9 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     _poissonOddCasaCtrl.dispose();
     _poissonOddEmpateCtrl.dispose();
     _poissonOddForaCtrl.dispose();
+    for (final ctrl in _nivelEnfrentamentoCtrls.values) {
+      ctrl.dispose();
+    }
 
     for (var ctrl in _obsConfiancaCtrl) {
       ctrl.dispose();
@@ -4793,6 +4800,152 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     }
   }
 
+  Future<File> _getPoissonNivelEnfrentamentoFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File("${dir.path}/poisson_nivel_enfrentamento.json");
+  }
+
+  Future<void> _carregarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      if (await file.exists()) {
+        final data = await file.readAsString();
+        if (data.isNotEmpty) {
+          final json = jsonDecode(data) as Map<String, dynamic>;
+          final pesos = json['pesos'];
+          setState(() {
+            _nivelEnfrentamentoAtivo = json['ativo'] == true;
+            _nivelEnfrentamentoPesos.clear();
+            if (pesos is Map) {
+              pesos.forEach((key, value) {
+                final pos = int.tryParse(key.toString());
+                final pct = (value as num?)?.toDouble();
+                if (pos != null && pct != null) {
+                  _nivelEnfrentamentoPesos[pos] = pct;
+                }
+              });
+            }
+            _nivelEnfrentamentoPesos.forEach((pos, value) {
+              if (_nivelEnfrentamentoCtrls.containsKey(pos)) {
+                _nivelEnfrentamentoCtrls[pos]!.text = value.toStringAsFixed(0);
+              }
+            });
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar nível de enfrentamento: $e");
+    }
+  }
+
+  Future<void> _salvarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      final json = {
+        'ativo': _nivelEnfrentamentoAtivo,
+        'pesos': _nivelEnfrentamentoPesos.map((key, value) => MapEntry(key.toString(), value)),
+      };
+      await file.writeAsString(jsonEncode(json));
+    } catch (e) {
+      debugPrint("Erro ao salvar nível de enfrentamento: $e");
+    }
+  }
+
+  double _pesoNivelEnfrentamento(int? posicao) {
+    if (!_nivelEnfrentamentoAtivo || posicao == null || posicao <= 0) {
+      return 1.0;
+    }
+    final pct = _nivelEnfrentamentoPesos[posicao] ?? 100.0;
+    return (pct.clamp(0.0, 100.0)) / 100.0;
+  }
+
+  void _atualizarPesoNivelEnfrentamento(int posicao, String valor) {
+    final parsed = double.tryParse(valor.replaceAll(',', '.'));
+    if (parsed == null) return;
+    _nivelEnfrentamentoPesos[posicao] = parsed.clamp(0.0, 100.0);
+    _salvarConfigNivelEnfrentamento();
+  }
+
+  List<Map<String, dynamic>> _gerarClassificacaoScout(String liga) {
+    final jogos = _scoutPartidas.where((p) => p['campeonato'] == liga).toList();
+    final Map<String, Map<String, dynamic>> tabela = {};
+
+    void initTime(String t) {
+      if (!tabela.containsKey(t)) {
+        tabela[t] = {'time': t, 'p': 0, 'j': 0, 'v': 0, 'e': 0, 'd': 0, 'gp': 0, 'gc': 0, 'sg': 0};
+      }
+    }
+
+    for (var p in jogos) {
+      final mand = p['mandante'].toString();
+      final vis = p['visitante'].toString();
+      final gm = (p['gm_casa'] as num).toInt();
+      final gv = (p['gm_fora'] as num).toInt();
+
+      initTime(mand);
+      initTime(vis);
+
+      tabela[mand]!['j']++;
+      tabela[mand]!['gp'] += gm;
+      tabela[mand]!['gc'] += gv;
+      tabela[mand]!['sg'] += (gm - gv);
+
+      tabela[vis]!['j']++;
+      tabela[vis]!['gp'] += gv;
+      tabela[vis]!['gc'] += gm;
+      tabela[vis]!['sg'] += (gv - gm);
+
+      if (gm > gv) {
+        tabela[mand]!['p'] += 3;
+        tabela[mand]!['v']++;
+        tabela[vis]!['d']++;
+      } else if (gv > gm) {
+        tabela[vis]!['p'] += 3;
+        tabela[vis]!['v']++;
+        tabela[mand]!['d']++;
+      } else {
+        tabela[mand]!['p'] += 1;
+        tabela[mand]!['e']++;
+        tabela[vis]!['p'] += 1;
+        tabela[vis]!['e']++;
+      }
+    }
+
+    final lista = tabela.values.toList();
+    lista.sort((a, b) {
+      if (b['p'] != a['p']) return b['p'].compareTo(a['p']);
+      if (b['v'] != a['v']) return b['v'].compareTo(a['v']);
+      if (b['sg'] != a['sg']) return b['sg'].compareTo(a['sg']);
+      return b['gp'].compareTo(a['gp']);
+    });
+
+    return lista;
+  }
+
+  Map<String, int> _mapaPosicoesLiga(String liga) {
+    final classificacao = _gerarClassificacaoScout(liga);
+    final posicoes = <String, int>{};
+    for (int i = 0; i < classificacao.length; i++) {
+      final time = classificacao[i]['time']?.toString() ?? '';
+      if (time.isNotEmpty) {
+        posicoes[time] = i + 1;
+      }
+    }
+    return posicoes;
+  }
+
+  void _sincronizarControllersNivelEnfrentamento(int totalTimes) {
+    for (int pos = 1; pos <= totalTimes; pos++) {
+      if (!_nivelEnfrentamentoCtrls.containsKey(pos)) {
+        final valor = _nivelEnfrentamentoPesos[pos] ?? 100.0;
+        _nivelEnfrentamentoCtrls[pos] = TextEditingController(text: valor.toStringAsFixed(0));
+      } else if (_nivelEnfrentamentoCtrls[pos]!.text.isEmpty) {
+        final valor = _nivelEnfrentamentoPesos[pos] ?? 100.0;
+        _nivelEnfrentamentoCtrls[pos]!.text = valor.toStringAsFixed(0);
+      }
+    }
+  }
+
   void _tentaPreencherDadosComScout() {
     final liga = _poissonCampeonatoCtrl.text.trim();
     final mandante = _poissonMandanteCtrl.text.trim();
@@ -4814,6 +4967,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
 
     int contagemZero = 0;
     int contagemCaos = 0;
+    final posicoesLiga = _mapaPosicoesLiga(liga);
 
     int nCasa = int.tryParse(_poissonJogosMandanteCtrl.text) ?? 8;
     var jogosMandante = jogosLiga.where((p) => p['mandante'] == mandante).toList();
@@ -4824,16 +4978,19 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       for (var p in jogosMandante) {
         double gm = (p['gm_casa'] as num).toDouble();
         double gs = (p['gm_fora'] as num).toDouble();
+        final adversario = p['visitante']?.toString();
+        final posicao = posicoesLiga[adversario];
+        final peso = _pesoNivelEnfrentamento(posicao);
 
-        sGM += gm;
-        sXG += (p['xg_casa'] as num).toDouble();
+        sGM += gm * peso;
+        sXG += (p['xg_casa'] as num).toDouble() * peso;
         sGS += gs;
 
         double totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
       }
-      _poissonGMMandanteCtrl.text = sGM.toInt().toString();
+      _poissonGMMandanteCtrl.text = _nivelEnfrentamentoAtivo ? sGM.toStringAsFixed(2) : sGM.toInt().toString();
       _poissonXGMandanteCtrl.text = sXG.toStringAsFixed(2);
       _poissonGSMandanteCtrl.text = sGS.toInt().toString();
     }
@@ -4847,16 +5004,19 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       for (var p in jogosVisitante) {
         double gm = (p['gm_fora'] as num).toDouble();
         double gs = (p['gm_casa'] as num).toDouble();
+        final adversario = p['mandante']?.toString();
+        final posicao = posicoesLiga[adversario];
+        final peso = _pesoNivelEnfrentamento(posicao);
 
-        sGM += gm;
-        sXG += (p['xg_fora'] as num).toDouble();
+        sGM += gm * peso;
+        sXG += (p['xg_fora'] as num).toDouble() * peso;
         sGS += gs;
 
         double totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
       }
-      _poissonGMVisitanteCtrl.text = sGM.toInt().toString();
+      _poissonGMVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? sGM.toStringAsFixed(2) : sGM.toInt().toString();
       _poissonXGVisitanteCtrl.text = sXG.toStringAsFixed(2);
       _poissonGSVisitanteCtrl.text = sGS.toInt().toString();
     }
@@ -7054,6 +7214,70 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
                 ),
               ),
             ],
+          ),
+
+          const Divider(height: 30),
+          const Text("🛡️ Nível de Enfrentamento"),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            value: _nivelEnfrentamentoAtivo,
+            title: const Text("Ativar ajuste por posição do adversário"),
+            subtitle: const Text("Quando ativo, gols e xG são ponderados pela posição do adversário na tabela."),
+            onChanged: (v) {
+              setState(() => _nivelEnfrentamentoAtivo = v);
+              _salvarConfigNivelEnfrentamento();
+              _tentaPreencherDadosComScout();
+            },
+          ),
+          Builder(
+            builder: (context) {
+              final liga = _poissonCampeonatoCtrl.text.trim();
+              if (liga.isEmpty) {
+                return const Text("Selecione uma liga para configurar os percentuais por posição.", style: TextStyle(color: Colors.grey));
+              }
+              final classificacao = _gerarClassificacaoScout(liga);
+              if (classificacao.isEmpty) {
+                return const Text("Sem dados suficientes para montar a tabela desta liga.", style: TextStyle(color: Colors.grey));
+              }
+              _sincronizarControllersNivelEnfrentamento(classificacao.length);
+              return Column(
+                children: List.generate(classificacao.length, (index) {
+                  final pos = index + 1;
+                  final time = classificacao[index]['time']?.toString() ?? '';
+                  final ctrl = _nivelEnfrentamentoCtrls[pos]!;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text("Posição $pos", style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: Text(time, overflow: TextOverflow.ellipsis),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: ctrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: "% Peso",
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              suffixText: "%",
+                            ),
+                            onChanged: (v) => _atualizarPesoNivelEnfrentamento(pos, v),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              );
+            },
           ),
 
           const Divider(height: 30),
@@ -14276,6 +14500,8 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   static const double _poissonFatorLigaPadrao = 1.00;
   static const double _poissonSuavizacaoPadrao = 0.75;
   static const double _poissonPesoEficaciaPadrao = 0.50;
+  bool _nivelEnfrentamentoAtivo = false;
+  final Map<int, double> _nivelEnfrentamentoPesos = {};
 
   @override
   void initState() {
@@ -14284,6 +14510,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     _tabController = TabController(length: 5, vsync: this);
     _carregarDatabase();
     _carregarRegistrosPoissonScout();
+    _carregarConfigNivelEnfrentamento();
   }
 
   @override
@@ -14375,6 +14602,47 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     } catch (e) {
       debugPrint("Erro ao salvar registros Poisson Scout: $e");
     }
+  }
+
+  Future<File> _getPoissonNivelEnfrentamentoFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File("${dir.path}/poisson_nivel_enfrentamento.json");
+  }
+
+  Future<void> _carregarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      if (await file.exists()) {
+        final data = await file.readAsString();
+        if (data.isNotEmpty) {
+          final json = jsonDecode(data) as Map<String, dynamic>;
+          final pesos = json['pesos'];
+          setState(() {
+            _nivelEnfrentamentoAtivo = json['ativo'] == true;
+            _nivelEnfrentamentoPesos.clear();
+            if (pesos is Map) {
+              pesos.forEach((key, value) {
+                final pos = int.tryParse(key.toString());
+                final pct = (value as num?)?.toDouble();
+                if (pos != null && pct != null) {
+                  _nivelEnfrentamentoPesos[pos] = pct;
+                }
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar nível de enfrentamento: $e");
+    }
+  }
+
+  double _pesoNivelEnfrentamento(int? posicao) {
+    if (!_nivelEnfrentamentoAtivo || posicao == null || posicao <= 0) {
+      return 1.0;
+    }
+    final pct = _nivelEnfrentamentoPesos[posicao] ?? 100.0;
+    return (pct.clamp(0.0, 100.0)) / 100.0;
   }
 
   Future<void> _salvarDatabase() async {
@@ -14855,22 +15123,37 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       return null;
     }
 
+    final posicoesLiga = _mapaPosicoesLiga(camp);
     double somaGMandante = 0;
     double somaXGMandante = 0;
     double somaGSMandante = 0;
     for (var p in jogosMandante) {
-      somaGMandante += (p['gm_casa'] as num).toDouble();
-      somaXGMandante += (p['xg_casa'] as num).toDouble();
-      somaGSMandante += (p['gm_fora'] as num).toDouble();
+      final gm = (p['gm_casa'] as num).toDouble();
+      final xg = (p['xg_casa'] as num).toDouble();
+      final gs = (p['gm_fora'] as num).toDouble();
+      final adversario = p['visitante']?.toString();
+      final posicao = posicoesLiga[adversario];
+      final peso = _pesoNivelEnfrentamento(posicao);
+
+      somaGMandante += gm * peso;
+      somaXGMandante += xg * peso;
+      somaGSMandante += gs;
     }
 
     double somaGVisitante = 0;
     double somaXGVisitante = 0;
     double somaGSVisitante = 0;
     for (var p in jogosVisitante) {
-      somaGVisitante += (p['gm_fora'] as num).toDouble();
-      somaXGVisitante += (p['xg_fora'] as num).toDouble();
-      somaGSVisitante += (p['gm_casa'] as num).toDouble();
+      final gm = (p['gm_fora'] as num).toDouble();
+      final xg = (p['xg_fora'] as num).toDouble();
+      final gs = (p['gm_casa'] as num).toDouble();
+      final adversario = p['mandante']?.toString();
+      final posicao = posicoesLiga[adversario];
+      final peso = _pesoNivelEnfrentamento(posicao);
+
+      somaGVisitante += gm * peso;
+      somaXGVisitante += xg * peso;
+      somaGSVisitante += gs;
     }
 
     final jogosLiga = _todasPartidas.where((p) => p['campeonato'] == camp).toList();
@@ -15433,6 +15716,18 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     });
 
     return lista;
+  }
+
+  Map<String, int> _mapaPosicoesLiga(String camp) {
+    final classificacao = _gerarClassificacao(camp);
+    final posicoes = <String, int>{};
+    for (int i = 0; i < classificacao.length; i++) {
+      final time = classificacao[i]['time']?.toString() ?? '';
+      if (time.isNotEmpty) {
+        posicoes[time] = i + 1;
+      }
+    }
+    return posicoes;
   }
 
   // CALCULA STATS PARA O CARD DE POISSON
