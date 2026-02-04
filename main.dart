@@ -17,6 +17,9 @@ import 'package:intl/intl.dart';
 import 'dart:math';
 import 'package:intl/date_symbol_data_local.dart';
 
+// Versão placar na tela de pesquisa OK
+
+
 // Ponto de entrada da aplicação.
 void main() async {
   // Garante que os bindings do Flutter estão inicializados
@@ -584,6 +587,8 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
 
       final newRecord = {
         'dataAtualizacao': now.toIso8601String(),
+        'ano': now.year,
+        'mes': now.month,
         'bancaAtual': bancaAtual,
         'roi': roi,
         'lucroTotal': lucroTotalApostas,
@@ -610,30 +615,23 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         'statsPorOdd': oddsStatsSnap,
       };
 
-      final isFirstHalf = now.day <= 15;
-
       int existingIndex = -1; // Default: -1 (adiciona novo)
 
-      // MODIFICADO: Só tenta atualizar o registro da quinzena
+      // MODIFICADO: garante apenas um registro por mês (ano + mês).
       // se forceNewRecord for FALSO.
       if (forceNewRecord == false) {
         existingIndex = records.lastIndexWhere((r) {
-          // Adiciona verificação de nulidade
-          if(r['dataAtualizacao'] == null) return false;
-          final recordDate = DateTime.tryParse(r['dataAtualizacao']);
-          if(recordDate == null) return false;
-
-          final isRecordInFirstHalf = recordDate.day <= 15;
-          return recordDate.year == now.year &&
-              recordDate.month == now.month &&
-              isRecordInFirstHalf == isFirstHalf;
+          final int? recordYear = (r['ano'] as num?)?.toInt() ?? DateTime.tryParse(r['dataAtualizacao'] ?? '')?.year;
+          final int? recordMonth = (r['mes'] as num?)?.toInt() ?? DateTime.tryParse(r['dataAtualizacao'] ?? '')?.month;
+          if (recordYear == null || recordMonth == null) return false;
+          return recordYear == now.year && recordMonth == now.month;
         });
       }
 
       if (existingIndex != -1) {
-        records[existingIndex] = newRecord; // Atualiza o registro da quinzena
+        records[existingIndex] = newRecord; // Atualiza o registro do mês
       } else {
-        records.add(newRecord); // Adiciona um novo registro
+        records.add(newRecord); // Adiciona um novo registro mensal
       }
 
       records.sort((a, b) => DateTime.parse(a['dataAtualizacao']).compareTo(DateTime.parse(b['dataAtualizacao'])));
@@ -9456,12 +9454,19 @@ class _TelaDashboardState extends State<TelaDashboard> {
     }
   }
 
-  Future<void> _salvarObservacao(int idAposta, String observacao) async {
+  Future<void> _salvarObservacao(
+      int idAposta,
+      String observacao, {
+        int? placarCasa,
+        int? placarFora,
+      }) async {
     try {
       final index = _apostas.indexWhere((a) => a['id'] == idAposta);
       if (index != -1) {
         setState(() {
           _apostas[index]['observacaoPosJogo'] = observacao;
+          _apostas[index]['placarCasa'] = placarCasa;
+          _apostas[index]['placarFora'] = placarFora;
           _aplicarTodosFiltros();
         });
 
@@ -9470,6 +9475,8 @@ class _TelaDashboardState extends State<TelaDashboard> {
           final indexJson = listaJson.indexWhere((a) => a['id'] == idAposta);
           if (indexJson != -1) {
             listaJson[indexJson]['observacaoPosJogo'] = observacao;
+            listaJson[indexJson]['placarCasa'] = placarCasa;
+            listaJson[indexJson]['placarFora'] = placarFora;
           }
         }
 
@@ -9820,8 +9827,107 @@ class _TelaDashboardState extends State<TelaDashboard> {
     );
   }
 
+  String _poissonMetricLabel(String metric) {
+    switch (metric) {
+      case 'pCasa':
+        return "Vitória Casa";
+      case 'pEmpate':
+        return "Empate";
+      case 'pFora':
+        return "Vitória Fora";
+      case 'p1X':
+        return "Chance Dupla 1X";
+      case 'pX2':
+        return "Chance Dupla X2";
+      case 'p12':
+        return "Chance Dupla 12";
+      case 'pOver15':
+        return "Over 1.5";
+      case 'pUnder15':
+        return "Under 1.5";
+      case 'pOver25':
+        return "Over 2.5";
+      case 'pUnder25':
+        return "Under 2.5";
+      case 'pOver35':
+        return "Over 3.5";
+      case 'pUnder35':
+        return "Under 3.5";
+      case 'pOver45':
+        return "Over 4.5";
+      case 'pUnder45':
+        return "Under 4.5";
+      case 'pBTTS_Sim':
+        return "Ambos Marcam (Sim)";
+      case 'pBTTS_Nao':
+        return "Ambos Marcam (Não)";
+      case 'edge':
+        return "Edge (Value Bet)";
+      default:
+        return metric;
+    }
+  }
+
+  bool? _resultadoAtendeValueBet(String aposta, int casa, int fora) {
+    switch (aposta) {
+      case 'Casa':
+        return casa > fora;
+      case 'Empate':
+        return casa == fora;
+      case 'Fora':
+        return casa < fora;
+      default:
+        return null;
+    }
+  }
+
+  bool? _resultadoAtendeMetricaPoisson(Map<String, dynamic> card, int casa, int fora, String metric) {
+    switch (metric) {
+      case 'pCasa':
+        return casa > fora;
+      case 'pEmpate':
+        return casa == fora;
+      case 'pFora':
+        return casa < fora;
+      case 'p1X':
+        return casa >= fora;
+      case 'pX2':
+        return casa <= fora;
+      case 'p12':
+        return casa != fora;
+      case 'pOver15':
+        return (casa + fora) > 1;
+      case 'pUnder15':
+        return (casa + fora) <= 1;
+      case 'pOver25':
+        return (casa + fora) > 2;
+      case 'pUnder25':
+        return (casa + fora) <= 2;
+      case 'pOver35':
+        return (casa + fora) > 3;
+      case 'pUnder35':
+        return (casa + fora) <= 3;
+      case 'pOver45':
+        return (casa + fora) > 4;
+      case 'pUnder45':
+        return (casa + fora) <= 4;
+      case 'pBTTS_Sim':
+        return casa > 0 && fora > 0;
+      case 'pBTTS_Nao':
+        return casa == 0 || fora == 0;
+      case 'edge':
+        final String? aposta = card['resultados']?['value']?['aposta'] as String?;
+        if (aposta == null) return null;
+        return _resultadoAtendeValueBet(aposta, casa, fora);
+      default:
+        return null;
+    }
+  }
+
   void _mostrarDetalhesEDiario(Map<String, dynamic> aposta) {
     final observacaoCtrl = TextEditingController(text: aposta['observacaoPosJogo'] ?? '');
+    final placarCasaCtrl = TextEditingController(text: aposta['placarCasa']?.toString() ?? '');
+    final placarForaCtrl = TextEditingController(text: aposta['placarFora']?.toString() ?? '');
     final double lucro = (aposta['lucro'] as num).toDouble();
     final bool isGreen = lucro > 0;
     final bool isRed = lucro < 0;
@@ -9904,14 +10010,48 @@ class _TelaDashboardState extends State<TelaDashboard> {
                       if (cardPoisson == null)
                         OutlinedButton.icon(onPressed: () => _mostrarDialogoSelecaoVinculoPoisson(aposta['id']), icon: const Icon(Icons.link, size: 18), label: const Text("Vincular Poisson"), style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo))
                       else
-                        _buildCardPoissonExpandivel(cardPoisson, () {
-                          _confirmarDesvinculo(context, () {
-                            _desvincularCardPoisson(cardPoisson!['id']);
-                            setStateDialog(() {});
-                          });
-                        }),
+                        _buildCardPoissonExpandivel(
+                          cardPoisson,
+                              () {
+                            _confirmarDesvinculo(context, () {
+                              _desvincularCardPoisson(cardPoisson!['id']);
+                              setStateDialog(() {});
+                            });
+                          },
+                          placarCasa: int.tryParse(placarCasaCtrl.text),
+                          placarFora: int.tryParse(placarForaCtrl.text),
+                          metric: _poissonMetric,
+                        ),
 
                       const Divider(height: 30),
+                      Row(children: const [Icon(Icons.scoreboard, color: Colors.deepPurple, size: 20), SizedBox(width: 6), Text("Placar Final", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepPurple))]),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: placarCasaCtrl,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              onChanged: (_) => setStateDialog(() {}),
+                              decoration: InputDecoration(labelText: "Casa", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text("x", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: placarForaCtrl,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              onChanged: (_) => setStateDialog(() {}),
+                              decoration: InputDecoration(labelText: "Fora", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
                       Row(children: const [Icon(Icons.edit_note, color: Colors.indigo, size: 20), SizedBox(width: 6), Text("Diário Pós-Jogo", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo))]),
                       const SizedBox(height: 8),
                       TextField(
@@ -9925,7 +10065,17 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 ),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Fechar", style: TextStyle(color: Colors.grey))),
-                  ElevatedButton.icon(icon: const Icon(Icons.check, size: 18), label: const Text("Salvar Diário"), style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white), onPressed: () { _salvarObservacao(aposta['id'], observacaoCtrl.text); Navigator.pop(ctx); }),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text("Salvar Diário"),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                    onPressed: () {
+                      final placarCasa = int.tryParse(placarCasaCtrl.text.trim());
+                      final placarFora = int.tryParse(placarForaCtrl.text.trim());
+                      _salvarObservacao(aposta['id'], observacaoCtrl.text, placarCasa: placarCasa, placarFora: placarFora);
+                      Navigator.pop(ctx);
+                    },
+                  ),
                 ],
               );
             }
@@ -9985,7 +10135,13 @@ class _TelaDashboardState extends State<TelaDashboard> {
     );
   }
 
-  Widget _buildCardPoissonExpandivel(Map<String, dynamic> card, VoidCallback onUnlink) {
+  Widget _buildCardPoissonExpandivel(
+      Map<String, dynamic> card,
+      VoidCallback onUnlink, {
+        int? placarCasa,
+        int? placarFora,
+        String? metric,
+      }) {
     final res = card['resultados'] as Map<String, dynamic>;
     final probGols = res['probGols'] as Map<String, dynamic>?;
     final placarProvavel = res['placarProvavel'] as Map<String, dynamic>?;
@@ -10044,7 +10200,24 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 if (res['value'] != null) ...[
                   const SizedBox(height: 6),
                   Text("Sugestão: ${res['value']['aposta']} (Edge: ${o(res['value']['edge'])})", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
-                ]
+                ],
+                if (placarCasa != null && placarFora != null) ...[
+                  const Divider(),
+                  Text("Resultado Real: $placarCasa x $placarFora", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  if (metric != null) ...[
+                    const SizedBox(height: 4),
+                    Builder(builder: (context) {
+                      final confirmou = _resultadoAtendeMetricaPoisson(card, placarCasa, placarFora, metric);
+                      if (confirmou == null) {
+                        return Text("Métrica atual: ${_poissonMetricLabel(metric)} (sem veredito)", style: const TextStyle(fontSize: 11, color: Colors.grey));
+                      }
+                      return Text(
+                        "Métrica atual: ${_poissonMetricLabel(metric)} — ${confirmou ? 'Confirmou' : 'Não confirmou'}",
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: confirmou ? Colors.green : Colors.red),
+                      );
+                    }),
+                  ],
+                ],
               ],
             ),
           )
@@ -10426,6 +10599,15 @@ class _TelaDashboardState extends State<TelaDashboard> {
     final String apostaIdStr = aposta['id'].toString();
     final hasLinkedConfidence = _cardsConfianca.any((c) => c['linkedBetId'] == apostaIdStr);
     final hasLinkedPoisson = _cardsPoisson.any((c) => c['linkedBetId'] == apostaIdStr);
+    final int? placarCasa = (aposta['placarCasa'] as num?)?.toInt();
+    final int? placarFora = (aposta['placarFora'] as num?)?.toInt();
+    Map<String, dynamic>? cardPoisson;
+    if (hasLinkedPoisson) {
+      try { cardPoisson = _cardsPoisson.firstWhere((c) => c['linkedBetId'] == apostaIdStr); } catch (_) {}
+    }
+    final bool? validacaoPoisson = (cardPoisson != null && placarCasa != null && placarFora != null && _modoPesquisa == 2)
+        ? _resultadoAtendeMetricaPoisson(cardPoisson, placarCasa, placarFora, _poissonMetric)
+        : null;
 
     return Card(
       elevation: 0,
@@ -10461,9 +10643,20 @@ class _TelaDashboardState extends State<TelaDashboard> {
                           Row(children: [
                             Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4)), child: Text("R\$ ${(aposta['stake'] as num).toStringAsFixed(0)}", style: const TextStyle(fontSize: 11, color: Colors.grey))),
                             const SizedBox(width: 8),
+                            if (placarCasa != null && placarFora != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: Colors.deepPurple.shade50, borderRadius: BorderRadius.circular(4)),
+                                child: Text("$placarCasa x $placarFora", style: TextStyle(fontSize: 11, color: Colors.deepPurple.shade700, fontWeight: FontWeight.bold)),
+                              ),
+                            if (placarCasa != null && placarFora != null) const SizedBox(width: 8),
                             if (!hasDiary) Icon(Icons.edit_note, size: 16, color: Colors.grey.shade300) else const Icon(Icons.assignment, size: 16, color: Colors.indigo),
                             if (hasLinkedConfidence) ...[const SizedBox(width: 4), const Icon(Icons.link, size: 16, color: Colors.teal)],
                             if (hasLinkedPoisson) ...[const SizedBox(width: 4), const Icon(Icons.bar_chart, size: 16, color: Colors.indigo)],
+                            if (_modoPesquisa == 2 && validacaoPoisson != null) ...[
+                              const SizedBox(width: 4),
+                              Icon(validacaoPoisson ? Icons.check_circle : Icons.cancel, size: 16, color: validacaoPoisson ? Colors.green : Colors.red),
+                            ],
                           ],
                           ),
                           Text(isGreen ? "+ R\$ ${lucro.toStringAsFixed(2)}" : "R\$ ${lucro.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: statusColor)),
