@@ -4238,8 +4238,16 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   },
                   onSelected: (s) => _tipoCtrl.text = s,
                   fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-                    if (_tipoCtrl.text != controller.text) { _tipoCtrl.value = controller.value; }
-                    return TextFormField(controller: controller, focusNode: focusNode, onFieldSubmitted: (s) => onSubmitted(), decoration: const InputDecoration(labelText: "Tipo (ex: Futebol)"));
+                    if (controller.text != _tipoCtrl.text) {
+                      controller.value = _tipoCtrl.value;
+                    }
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onChanged: (_) => _tipoCtrl.value = controller.value,
+                      onFieldSubmitted: (s) => onSubmitted(),
+                      decoration: const InputDecoration(labelText: "Tipo (ex: Futebol)"),
+                    );
                   },
                 ),
                 const SizedBox(height: 8),
@@ -4250,8 +4258,16 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   },
                   onSelected: (s) => _campeonatoCtrl.text = s,
                   fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-                    if(_campeonatoCtrl.text != controller.text) { _campeonatoCtrl.value = controller.value; }
-                    return TextFormField(controller: controller, focusNode: focusNode, onFieldSubmitted: (s) => onSubmitted(), decoration: const InputDecoration(labelText: "Campeonato (ex: Brasileirão)"));
+                    if (controller.text != _campeonatoCtrl.text) {
+                      controller.value = _campeonatoCtrl.value;
+                    }
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onChanged: (_) => _campeonatoCtrl.value = controller.value,
+                      onFieldSubmitted: (s) => onSubmitted(),
+                      decoration: const InputDecoration(labelText: "Campeonato (ex: Brasileirão)"),
+                    );
                   },
                 ),
                 const SizedBox(height: 8),
@@ -4262,10 +4278,16 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   },
                   onSelected: (s) => _timeCtrl.text = s,
                   fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-                    if (_timeCtrl.text != controller.text) {
-                      _timeCtrl.value = controller.value;
+                    if (controller.text != _timeCtrl.text) {
+                      controller.value = _timeCtrl.value;
                     }
-                    return TextFormField(controller: controller, focusNode: focusNode, onFieldSubmitted: (s) => onSubmitted(), decoration: const InputDecoration(labelText: "Time (aposta em 1 time)"));
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onChanged: (_) => _timeCtrl.value = controller.value,
+                      onFieldSubmitted: (s) => onSubmitted(),
+                      decoration: const InputDecoration(labelText: "Time (aposta em 1 time)"),
+                    );
                   },
                 ),
                 const SizedBox(height: 8),
@@ -4304,12 +4326,13 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   },
                   onSelected: (s) => _comentariosCtrl.text = s,
                   fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-                    if (_comentariosCtrl.text != controller.text) {
-                      _comentariosCtrl.value = controller.value;
+                    if (controller.text != _comentariosCtrl.text) {
+                      controller.value = _comentariosCtrl.value;
                     }
                     return TextFormField(
                       controller: controller,
                       focusNode: focusNode,
+                      onChanged: (_) => _comentariosCtrl.value = controller.value,
                       onFieldSubmitted: (s) => onSubmitted(),
                       decoration: const InputDecoration(labelText: "Comentários (ex: Bom valor)"),
                       maxLines: 2,
@@ -19128,7 +19151,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
 
 
 
