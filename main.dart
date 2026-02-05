@@ -1248,6 +1248,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       'margem': margem,
       'comentarios': comentarios,
       'evPositivo': _evPositivoSelecionado,
+      'resultado': _resultadoSelecionado,
       'playbookId': playbookId,
       'playbookNome': playbookId == null
           ? null
@@ -1276,6 +1277,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       _margemCtrl.text = pre['margem']?.toString() ?? '';
       _comentariosCtrl.text = (pre['comentarios'] as String?) ?? '';
       _evPositivoSelecionado = pre['evPositivo'] as bool?;
+      _resultadoSelecionado = (pre['resultado'] as num?)?.toInt() ?? -1;
       _playbookSelecionadoId = (pre['playbookId'] as num?)?.toInt();
       _tabController.animateTo(2);
       _atualizarStakeSugerida();
@@ -4260,7 +4262,9 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   },
                   onSelected: (s) => _timeCtrl.text = s,
                   fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-                    _timeCtrl.value = controller.value;
+                    if (_timeCtrl.text != controller.text) {
+                      _timeCtrl.value = controller.value;
+                    }
                     return TextFormField(controller: controller, focusNode: focusNode, onFieldSubmitted: (s) => onSubmitted(), decoration: const InputDecoration(labelText: "Time (aposta em 1 time)"));
                   },
                 ),
@@ -9395,24 +9399,31 @@ class TelaSobra3 extends StatefulWidget {
   State<TelaSobra3> createState() => _TelaSobra3State();
 }
 
-class _TelaSobra3State extends State<TelaSobra3> {
+class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _blocosDeRegras = [];
   List<Map<String, dynamic>> _blocosFiltrados = [];
+  List<Map<String, dynamic>> _playbooks = [];
   bool _isLoading = true;
+  late TabController _tabController;
 
   // Controle de Busca
   final TextEditingController _searchCtrl = TextEditingController();
+  final TextEditingController _playbookSearchCtrl = TextEditingController();
   String _termoBusca = "";
+  String _termoBuscaPlaybook = "";
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _carregarRegras();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _searchCtrl.dispose();
+    _playbookSearchCtrl.dispose();
     super.dispose();
   }
 
@@ -9420,6 +9431,11 @@ class _TelaSobra3State extends State<TelaSobra3> {
   Future<File> _getRegrasFile() async {
     final dir = await getApplicationDocumentsDirectory();
     return File("${dir.path}/regras_apostas.json");
+  }
+
+  Future<File> _getApostasFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File("${dir.path}/apostas_data.json");
   }
 
   Future<void> _carregarRegras() async {
@@ -9459,8 +9475,54 @@ class _TelaSobra3State extends State<TelaSobra3> {
     } catch (e) {
       debugPrint("Erro ao carregar regras: $e");
     }
+    await _carregarPlaybooks();
     _filtrarBlocos();
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _carregarPlaybooks() async {
+    try {
+      final file = await _getApostasFile();
+      if (!await file.exists()) {
+        _playbooks = [];
+        return;
+      }
+      final data = await file.readAsString();
+      if (data.isEmpty) {
+        _playbooks = [];
+        return;
+      }
+      final decoded = jsonDecode(data);
+      if (decoded is Map && decoded['playbooks'] is List) {
+        _playbooks = List<Map<String, dynamic>>.from(decoded['playbooks']);
+      } else {
+        _playbooks = [];
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar playbooks: $e");
+      _playbooks = [];
+    }
+  }
+
+  Future<void> _salvarPlaybooks() async {
+    try {
+      final file = await _getApostasFile();
+      Map<String, dynamic> decoded = {};
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          final parsed = jsonDecode(content);
+          if (parsed is Map<String, dynamic>) {
+            decoded = parsed;
+          }
+        }
+      }
+
+      decoded['playbooks'] = _playbooks;
+      await file.writeAsString(jsonEncode(decoded));
+    } catch (e) {
+      debugPrint("Erro ao salvar playbooks: $e");
+    }
   }
 
   Future<void> _salvarRegras() async {
@@ -9635,6 +9697,205 @@ class _TelaSobra3State extends State<TelaSobra3> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _dialogAdicionarEditarPlaybook({Map<String, dynamic>? playbookExistente}) async {
+    final bool isEditing = playbookExistente != null;
+    final nomeCtrl = TextEditingController(text: playbookExistente?['nome']?.toString() ?? '');
+    final estrategiaCtrl = TextEditingController(text: playbookExistente?['estrategia']?.toString() ?? '');
+    final mercadoCtrl = TextEditingController(text: playbookExistente?['mercadoPrincipal']?.toString() ?? '');
+    final gatilhosCtrl = TextEditingController(
+      text: ((playbookExistente?['gatilhos'] as List?) ?? const []).map((e) => e.toString()).join('\n'),
+    );
+    final checklistCtrl = TextEditingController(
+      text: ((playbookExistente?['checklist'] as List?) ?? const []).map((e) => e.toString()).join('\n'),
+    );
+    final riscoCtrl = TextEditingController(text: playbookExistente?['risco']?.toString() ?? '');
+    final observacoesCtrl = TextEditingController(text: playbookExistente?['observacoes']?.toString() ?? '');
+
+    await showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(isEditing ? 'Editar Playbook' : 'Novo Playbook'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nomeCtrl, decoration: const InputDecoration(labelText: 'Nome do playbook')),
+                const SizedBox(height: 8),
+                TextField(controller: estrategiaCtrl, decoration: const InputDecoration(labelText: 'Estratégia / cenário principal')),
+                const SizedBox(height: 8),
+                TextField(controller: mercadoCtrl, decoration: const InputDecoration(labelText: 'Mercado principal (ex: Over 2.5)')),
+                const SizedBox(height: 8),
+                TextField(controller: gatilhosCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Gatilhos de entrada (1 por linha)')),
+                const SizedBox(height: 8),
+                TextField(controller: checklistCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Checklist operacional (1 por linha)')),
+                const SizedBox(height: 8),
+                TextField(controller: riscoCtrl, decoration: const InputDecoration(labelText: 'Gestão de risco')),
+                const SizedBox(height: 8),
+                TextField(controller: observacoesCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Observações / notas')),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              final nome = nomeCtrl.text.trim();
+              if (nome.isEmpty) return;
+
+              List<String> _linhas(String txt) => txt
+                  .split('\n')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+
+              final data = {
+                'nome': nome,
+                'estrategia': estrategiaCtrl.text.trim(),
+                'mercadoPrincipal': mercadoCtrl.text.trim(),
+                'gatilhos': _linhas(gatilhosCtrl.text),
+                'checklist': _linhas(checklistCtrl.text),
+                'risco': riscoCtrl.text.trim(),
+                'observacoes': observacoesCtrl.text.trim(),
+                'atualizadoEm': DateTime.now().toIso8601String(),
+              };
+
+              setState(() {
+                if (isEditing) {
+                  final idx = _playbooks.indexWhere((p) => (p['id'] as num?)?.toInt() == (playbookExistente!['id'] as num?)?.toInt());
+                  if (idx != -1) {
+                    final original = _playbooks[idx];
+                    _playbooks[idx] = {
+                      ...original,
+                      ...data,
+                    };
+                  }
+                } else {
+                  final int newId = _playbooks.isEmpty
+                      ? 1
+                      : (_playbooks.map((p) => (p['id'] as num?)?.toInt() ?? 0).reduce((a, b) => a > b ? a : b) + 1);
+                  _playbooks.add({
+                    'id': newId,
+                    'criadoEm': DateTime.now().toIso8601String(),
+                    ...data,
+                  });
+                }
+              });
+
+              _salvarPlaybooks();
+              Navigator.pop(c);
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _removerPlaybook(Map<String, dynamic> playbook) {
+    _confirmarExclusao(
+      titulo: playbook['nome']?.toString() ?? 'Playbook',
+      onConfirm: () {
+        setState(() => _playbooks.removeWhere((p) => (p['id'] as num?)?.toInt() == (playbook['id'] as num?)?.toInt()));
+        _salvarPlaybooks();
+      },
+    );
+  }
+
+  Widget _buildTabPlaybooks() {
+    final termo = _termoBuscaPlaybook.toLowerCase().trim();
+    final filtrados = _playbooks.where((p) {
+      if (termo.isEmpty) return true;
+      final nome = (p['nome'] ?? '').toString().toLowerCase();
+      final estrategia = (p['estrategia'] ?? '').toString().toLowerCase();
+      final mercado = (p['mercadoPrincipal'] ?? '').toString().toLowerCase();
+      return nome.contains(termo) || estrategia.contains(termo) || mercado.contains(termo);
+    }).toList()
+      ..sort((a, b) => ((a['nome'] ?? '').toString()).compareTo((b['nome'] ?? '').toString()));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _playbookSearchCtrl,
+            onChanged: (v) => setState(() => _termoBuscaPlaybook = v),
+            decoration: InputDecoration(
+              hintText: 'Buscar playbook por nome, estratégia ou mercado...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _termoBuscaPlaybook.isNotEmpty
+                  ? IconButton(
+                      onPressed: () => setState(() {
+                        _playbookSearchCtrl.clear();
+                        _termoBuscaPlaybook = '';
+                      }),
+                      icon: const Icon(Icons.clear),
+                    )
+                  : null,
+            ),
+          ),
+        ),
+        Expanded(
+          child: filtrados.isEmpty
+              ? Center(
+                  child: Text(
+                    _playbooks.isEmpty ? 'Nenhum playbook cadastrado.' : 'Nenhum playbook encontrado para a busca.',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: filtrados.length,
+                  itemBuilder: (context, i) {
+                    final pb = filtrados[i];
+                    final gatilhos = ((pb['gatilhos'] as List?) ?? const []).map((e) => e.toString()).toList();
+                    final checklist = ((pb['checklist'] as List?) ?? const []).map((e) => e.toString()).toList();
+
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(child: Text(pb['nome']?.toString() ?? 'Sem nome', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                                IconButton(onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb), icon: const Icon(Icons.edit_outlined)),
+                                IconButton(onPressed: () => _removerPlaybook(pb), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                              ],
+                            ),
+                            if ((pb['estrategia']?.toString().isNotEmpty ?? false)) Text('Estratégia: ${pb['estrategia']}'),
+                            if ((pb['mercadoPrincipal']?.toString().isNotEmpty ?? false)) Text('Mercado: ${pb['mercadoPrincipal']}'),
+                            if ((pb['risco']?.toString().isNotEmpty ?? false)) Text('Risco: ${pb['risco']}'),
+                            const SizedBox(height: 8),
+                            const Text('Gatilhos de entrada', style: TextStyle(fontWeight: FontWeight.w600)),
+                            if (gatilhos.isEmpty)
+                              const Text('• Não definido')
+                            else
+                              ...gatilhos.map((g) => Text('• $g')),
+                            const SizedBox(height: 8),
+                            const Text('Checklist operacional', style: TextStyle(fontWeight: FontWeight.w600)),
+                            if (checklist.isEmpty)
+                              const Text('• Não definido')
+                            else
+                              ...checklist.map((c) => Text('• $c')),
+                            if ((pb['observacoes']?.toString().isNotEmpty ?? false)) ...[
+                              const SizedBox(height: 8),
+                              Text('Observações: ${pb['observacoes']}'),
+                            ]
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -10071,56 +10332,74 @@ class _TelaSobra3State extends State<TelaSobra3> {
         elevation: 0,
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Regras'),
+            Tab(text: 'Playbooks'),
+          ],
+        ),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            decoration: const BoxDecoration(color: Colors.indigo, borderRadius: BorderRadius.vertical(bottom: Radius.circular(24))),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (val) { _termoBusca = val; _filtrarBlocos(); },
-              style: const TextStyle(color: Colors.white),
-              cursorColor: Colors.white,
-              decoration: InputDecoration(
-                hintText: "Buscar setup ou regra...",
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-                prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.8)),
-                suffixIcon: _termoBusca.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, color: Colors.white), onPressed: () { _searchCtrl.clear(); setState(() { _termoBusca = ''; _filtrarBlocos(); }); }) : null,
-                filled: true,
-                fillColor: Colors.white.withOpacity(0.15),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                decoration: const BoxDecoration(color: Colors.indigo, borderRadius: BorderRadius.vertical(bottom: Radius.circular(24))),
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (val) { _termoBusca = val; _filtrarBlocos(); },
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: Colors.white,
+                  decoration: InputDecoration(
+                    hintText: "Buscar setup ou regra...",
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.8)),
+                    suffixIcon: _termoBusca.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, color: Colors.white), onPressed: () { _searchCtrl.clear(); setState(() { _termoBusca = ''; _filtrarBlocos(); }); }) : null,
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.15),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  ),
+                ),
               ),
-            ),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _blocosFiltrados.isEmpty
+                    ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.rule_folder, size: 64, color: Colors.grey.shade300), const SizedBox(height: 16), Text(_blocosDeRegras.isEmpty ? "Crie seu primeiro bloco de regras." : "Nenhum setup encontrado.", style: TextStyle(color: Colors.grey.shade500))]))
+                    : _termoBusca.isEmpty
+                    ? ReorderableListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _blocosFiltrados.length,
+                        onReorder: _onReorder,
+                        proxyDecorator: (child, index, animation) => Material(elevation: 8, color: Colors.transparent, borderRadius: BorderRadius.circular(16), child: child),
+                        itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _blocosFiltrados.length,
+                        itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
+                      ),
+              ),
+            ],
           ),
-
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _blocosFiltrados.isEmpty
-                ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.rule_folder, size: 64, color: Colors.grey.shade300), const SizedBox(height: 16), Text(_blocosDeRegras.isEmpty ? "Crie seu primeiro bloco de regras." : "Nenhum setup encontrado.", style: TextStyle(color: Colors.grey.shade500))]))
-                : _termoBusca.isEmpty
-                ? ReorderableListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _blocosFiltrados.length,
-              onReorder: _onReorder,
-              proxyDecorator: (child, index, animation) => Material(elevation: 8, color: Colors.transparent, borderRadius: BorderRadius.circular(16), child: child),
-              itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
-            )
-                : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _blocosFiltrados.length,
-              itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
-            ),
-          ),
+          _buildTabPlaybooks(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _dialogAdicionarEditarBloco(),
-        backgroundColor: Colors.indigo,
-        icon: const Icon(Icons.folder_open),
-        label: const Text("Novo Bloco"),
+      floatingActionButton: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) {
+          final onPlaybooks = _tabController.index == 1;
+          return FloatingActionButton.extended(
+            onPressed: onPlaybooks ? () => _dialogAdicionarEditarPlaybook() : () => _dialogAdicionarEditarBloco(),
+            backgroundColor: Colors.indigo,
+            icon: Icon(onPlaybooks ? Icons.auto_awesome_motion : Icons.folder_open),
+            label: Text(onPlaybooks ? "Novo Playbook" : "Novo Bloco"),
+          );
+        },
       ),
     );
   }
@@ -18849,11 +19128,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
-
-
-
-
 
 
 
