@@ -317,6 +317,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
   List<Map<String, dynamic>> historicoBanca = [];
   List<Map<String, dynamic>> metas = [];
   List<Map<String, dynamic>> playbooks = [];
+  List<Map<String, dynamic>> preLancamentos = [];
 
   // UI
   late TabController _tabController;
@@ -339,6 +340,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
   int? _nivelConfiancaSelecionado;
   bool? _evPositivoSelecionado;
   int? _playbookSelecionadoId;
+  int? _preLancamentoOrigemId;
 
   // ---------------------------
   // Estado dos Filtros
@@ -370,12 +372,31 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
+    _tipoCtrl.addListener(_onFormularioMudou);
+    _campeonatoCtrl.addListener(_onFormularioMudou);
+    _timeCtrl.addListener(_onFormularioMudou);
+    _oddCtrl.addListener(_onFormularioMudou);
+    _stakeCtrl.addListener(_onFormularioMudou);
+    _margemCtrl.addListener(_onFormularioMudou);
+    _comentariosCtrl.addListener(_onFormularioMudou);
     _carregarDados();
+  }
+
+  void _onFormularioMudou() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _tipoCtrl.removeListener(_onFormularioMudou);
+    _campeonatoCtrl.removeListener(_onFormularioMudou);
+    _timeCtrl.removeListener(_onFormularioMudou);
+    _oddCtrl.removeListener(_onFormularioMudou);
+    _stakeCtrl.removeListener(_onFormularioMudou);
+    _margemCtrl.removeListener(_onFormularioMudou);
+    _comentariosCtrl.removeListener(_onFormularioMudou);
     _tipoCtrl.dispose();
     _campeonatoCtrl.dispose();
     _timeCtrl.dispose();
@@ -673,6 +694,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         "historicoBanca": historicoBanca,
         "metas": metas,
         "playbooks": playbooks,
+        "preLancamentos": preLancamentos,
       };
       await file.writeAsString(jsonEncode(data));
       // Salva o dashboard (sem forçar) e recalcula as métricas globais
@@ -713,6 +735,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
             historicoBanca = (decodedData["historicoBanca"] ?? []).cast<Map<String, dynamic>>();
             metas = (decodedData["metas"] ?? []).cast<Map<String, dynamic>>();
             playbooks = (decodedData["playbooks"] ?? []).cast<Map<String, dynamic>>();
+            preLancamentos = (decodedData["preLancamentos"] ?? []).cast<Map<String, dynamic>>();
           });
         } else {
           needsSave = true;
@@ -1189,6 +1212,126 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       _atualizarStakeSugerida();
     });
     _salvarDados();
+  }
+
+  void _adicionarPreLancamento() {
+    final tipo = _tipoCtrl.text.trim().isEmpty ? "Geral" : _tipoCtrl.text.trim();
+    final campeonato = _campeonatoCtrl.text.trim();
+    final time = _timeCtrl.text.trim();
+    final odd = double.tryParse(_oddCtrl.text.replaceAll(",", ".")) ?? 0.0;
+    final stake = double.tryParse(_stakeCtrl.text.replaceAll(",", ".")) ?? _stakeIndividualDefault();
+    final cicloId = _selectedCicloIdForForm;
+    final margem = int.tryParse(_margemCtrl.text);
+    final comentarios = _comentariosCtrl.text.trim();
+    final playbookId = _playbookSelecionadoId;
+
+    if (cicloId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecione um ciclo para pré-lançar.")));
+      return;
+    }
+
+    final int newId = preLancamentos.isEmpty
+        ? 1
+        : ((preLancamentos.map((p) => (p['id'] as num).toInt()).reduce((x, y) => x > y ? x : y)) + 1);
+
+    final pre = <String, dynamic>{
+      'id': newId,
+      'dataCriacao': DateTime.now().toIso8601String(),
+      'dataAposta': _dataAposta.toIso8601String(),
+      'tipo': tipo,
+      'campeonato': campeonato,
+      'time': time,
+      'odd': odd,
+      'stake': stake,
+      'cicloId': cicloId,
+      'nivelConfianca': _nivelConfiancaSelecionado,
+      'margem': margem,
+      'comentarios': comentarios,
+      'evPositivo': _evPositivoSelecionado,
+      'playbookId': playbookId,
+      'playbookNome': playbookId == null
+          ? null
+          : (playbooks.firstWhere((p) => (p['id'] as num).toInt() == playbookId, orElse: () => {})['nome'] as String?),
+    };
+
+    setState(() {
+      preLancamentos.add(pre);
+    });
+    _salvarDados();
+
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Aposta salva como pré-lançada.")));
+  }
+
+  void _usarPreLancamento(Map<String, dynamic> pre) {
+    setState(() {
+      _preLancamentoOrigemId = (pre['id'] as num).toInt();
+      _tipoCtrl.text = (pre['tipo'] as String?) ?? '';
+      _campeonatoCtrl.text = (pre['campeonato'] as String?) ?? '';
+      _timeCtrl.text = (pre['time'] as String?) ?? '';
+      _oddCtrl.text = ((pre['odd'] as num?)?.toDouble() ?? 2.0).toStringAsFixed(2);
+      _stakeCtrl.text = ((pre['stake'] as num?)?.toDouble() ?? _stakeIndividualDefault()).toStringAsFixed(2);
+      _selectedCicloIdForForm = (pre['cicloId'] as num?)?.toInt();
+      _dataAposta = DateTime.tryParse((pre['dataAposta'] as String?) ?? '') ?? DateTime.now();
+      _nivelConfiancaSelecionado = (pre['nivelConfianca'] as num?)?.toInt();
+      _margemCtrl.text = pre['margem']?.toString() ?? '';
+      _comentariosCtrl.text = (pre['comentarios'] as String?) ?? '';
+      _evPositivoSelecionado = pre['evPositivo'] as bool?;
+      _playbookSelecionadoId = (pre['playbookId'] as num?)?.toInt();
+      _tabController.animateTo(2);
+      _atualizarStakeSugerida();
+    });
+  }
+
+  void _removerPreLancamentoPorId(int id) {
+    setState(() {
+      preLancamentos.removeWhere((p) => (p['id'] as num).toInt() == id);
+      if (_preLancamentoOrigemId == id) {
+        _preLancamentoOrigemId = null;
+      }
+    });
+    _salvarDados();
+  }
+
+  Widget _buildCardAnalisePreLancamento() {
+    final tipo = _tipoCtrl.text.trim();
+    final campeonato = _campeonatoCtrl.text.trim();
+    final time = _timeCtrl.text.trim();
+
+    if (tipo.isEmpty && campeonato.isEmpty && time.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final compativeis = apostas.where((a) {
+      final mtTipo = tipo.isEmpty || ((a['tipo'] as String?) ?? '').toLowerCase() == tipo.toLowerCase();
+      final mtCamp = campeonato.isEmpty || ((a['campeonato'] as String?) ?? '').toLowerCase() == campeonato.toLowerCase();
+      final mtTime = time.isEmpty || ((a['time'] as String?) ?? '').toLowerCase() == time.toLowerCase();
+      return mtTipo && mtCamp && mtTime;
+    }).toList();
+
+    final total = compativeis.length;
+    final vitorias = compativeis.where((a) => ((a['lucro'] as num?)?.toDouble() ?? 0.0) > 0).length;
+    final taxa = total > 0 ? (vitorias / total) * 100 : 0.0;
+    final lucro = compativeis.fold<double>(0.0, (s, a) => s + ((a['lucro'] as num?)?.toDouble() ?? 0.0));
+    final status = total == 0 ? 'Sem histórico suficiente' : (lucro >= 0 ? 'Perfil favorável' : 'Perfil de alerta');
+    final cor = total == 0 ? Colors.grey.shade700 : (lucro >= 0 ? Colors.green.shade700 : Colors.red.shade700);
+
+    return Card(
+      color: cor.withOpacity(0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Análise do pré-lançamento', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('Base histórica compatível: $total aposta(s)'),
+            Text('Taxa de acerto: ${taxa.toStringAsFixed(1)}%'),
+            Text('Lucro acumulado: R\$ ${lucro.toStringAsFixed(2)}'),
+            Text('Validador: $status', style: TextStyle(fontWeight: FontWeight.w600, color: cor)),
+          ],
+        ),
+      ),
+    );
   }
 
   void _adicionarPlaybook({
@@ -4223,6 +4366,8 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   ],
                 ),
                 const SizedBox(height: 8),
+                _buildCardAnalisePreLancamento(),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     ElevatedButton(
@@ -4250,76 +4395,126 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   ],
                 ),
                 const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    final tipo = _tipoCtrl.text.trim().isEmpty ? "Geral" : _tipoCtrl.text.trim();
-                    final campeonato = _campeonatoCtrl.text.trim();
-                    final time = _timeCtrl.text.trim();
-                    final odd = double.tryParse(_oddCtrl.text.replaceAll(",", ".")) ?? 0.0;
-                    final stake = double.tryParse(_stakeCtrl.text.replaceAll(",", ".")) ?? _stakeIndividualDefault();
-                    final cicloId = _selectedCicloIdForForm;
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _adicionarPreLancamento,
+                        icon: const Icon(Icons.playlist_add),
+                        label: const Text("Pré-lançar"),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final tipo = _tipoCtrl.text.trim().isEmpty ? "Geral" : _tipoCtrl.text.trim();
+                          final campeonato = _campeonatoCtrl.text.trim();
+                          final time = _timeCtrl.text.trim();
+                          final odd = double.tryParse(_oddCtrl.text.replaceAll(",", ".")) ?? 0.0;
+                          final stake = double.tryParse(_stakeCtrl.text.replaceAll(",", ".")) ?? _stakeIndividualDefault();
+                          final cicloId = _selectedCicloIdForForm;
 
-                    final margem = int.tryParse(_margemCtrl.text);
-                    final comentarios = _comentariosCtrl.text.trim();
-                    final playbookId = _playbookSelecionadoId;
+                          final margem = int.tryParse(_margemCtrl.text);
+                          final comentarios = _comentariosCtrl.text.trim();
+                          final playbookId = _playbookSelecionadoId;
 
-                    if (cicloId == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecione um ciclo ou crie um novo.")));
-                      return;
-                    }
+                          if (cicloId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecione um ciclo ou crie um novo.")));
+                            return;
+                          }
 
-                    if (playbookId == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecione o playbook usado nesta aposta.")));
-                      return;
-                    }
+                          if (playbookId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecione o playbook usado nesta aposta.")));
+                            return;
+                          }
 
-                    final playbookSelecionado = playbooks.firstWhere((p) => (p['id'] as num).toInt() == playbookId, orElse: () => {});
-                    if (playbookSelecionado.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Playbook inválido. Selecione novamente.")));
-                      return;
-                    }
+                          final playbookSelecionado = playbooks.firstWhere((p) => (p['id'] as num).toInt() == playbookId, orElse: () => {});
+                          if (playbookSelecionado.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Playbook inválido. Selecione novamente.")));
+                            return;
+                          }
 
-                    final cicloSelecionado = ciclos.firstWhere((c) => (c['id'] as num).toInt() == cicloId);
-                    if (cicloSelecionado['status'] == 'ganho' || cicloSelecionado['status'] == 'perdido') {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Este ciclo já está encerrado. Por favor, crie ou selecione um novo ciclo."),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                      return;
-                    }
+                          final cicloSelecionado = ciclos.firstWhere((c) => (c['id'] as num).toInt() == cicloId);
+                          if (cicloSelecionado['status'] == 'ganho' || cicloSelecionado['status'] == 'perdido') {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Este ciclo já está encerrado. Por favor, crie ou selecione um novo ciclo."),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                            return;
+                          }
 
-                    _registrarAposta(
-                      data: _dataAposta,
-                      tipo: tipo,
-                      campeonato: campeonato,
-                      time: time,
-                      odd: odd,
-                      stakeUsada: stake,
-                      resultado: _resultadoSelecionado,
-                      cicloId: cicloId,
-                      nivelConfianca: _nivelConfiancaSelecionado,
-                      margem: margem,
-                      comentarios: comentarios,
-                      evPositivo: _evPositivoSelecionado,
-                      playbookId: playbookId,
-                      playbookNome: playbookSelecionado['nome'] as String,
-                    );
+                          _registrarAposta(
+                            data: _dataAposta,
+                            tipo: tipo,
+                            campeonato: campeonato,
+                            time: time,
+                            odd: odd,
+                            stakeUsada: stake,
+                            resultado: _resultadoSelecionado,
+                            cicloId: cicloId,
+                            nivelConfianca: _nivelConfiancaSelecionado,
+                            margem: margem,
+                            comentarios: comentarios,
+                            evPositivo: _evPositivoSelecionado,
+                            playbookId: playbookId,
+                            playbookNome: playbookSelecionado['nome'] as String,
+                          );
 
-                    _tipoCtrl.clear();
-                    _campeonatoCtrl.clear();
-                    _timeCtrl.clear();
-                    _oddCtrl.text = "2.00";
-                    _nivelConfiancaSelecionado = null;
-                    _margemCtrl.clear();
-                    _comentariosCtrl.clear();
-                    _evPositivoSelecionado = null;
-                    _playbookSelecionadoId = null;
-                    FocusScope.of(context).unfocus();
-                  },
-                  child: const Text("Registrar aposta"),
+                          final origemId = _preLancamentoOrigemId;
+                          if (origemId != null) {
+                            _removerPreLancamentoPorId(origemId);
+                          }
+
+                          _tipoCtrl.clear();
+                          _campeonatoCtrl.clear();
+                          _timeCtrl.clear();
+                          _oddCtrl.text = "2.00";
+                          _nivelConfiancaSelecionado = null;
+                          _margemCtrl.clear();
+                          _comentariosCtrl.clear();
+                          _evPositivoSelecionado = null;
+                          _playbookSelecionadoId = null;
+                          _preLancamentoOrigemId = null;
+                          FocusScope.of(context).unfocus();
+                        },
+                        child: const Text("Registrar aposta"),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 12),
+                const Text('Pré-lançadas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                if (preLancamentos.isEmpty)
+                  const Text('Nenhuma aposta pré-lançada no momento.'),
+                ...preLancamentos.reversed.map((pre) {
+                  final odd = ((pre['odd'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2);
+                  final stake = ((pre['stake'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2);
+                  final data = (pre['dataAposta'] as String? ?? '').split('T').first;
+                  return Card(
+                    child: ListTile(
+                      title: Text("${pre['tipo'] ?? 'Geral'} • ${pre['campeonato'] ?? ''}${(pre['time'] as String?)?.isNotEmpty == true ? ' • ${pre['time']}' : ''}"),
+                      subtitle: Text('Odd: $odd • Stake: R\$ $stake • Data: $data'),
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.send),
+                            tooltip: 'Lançar',
+                            onPressed: () => _usarPreLancamento(pre),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Excluir',
+                            onPressed: () => _removerPreLancamentoPorId((pre['id'] as num).toInt()),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
                 const Divider(),
                 const Text('Histórico de apostas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -18654,7 +18849,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
 
 
 
