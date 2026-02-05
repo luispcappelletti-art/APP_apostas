@@ -17,8 +17,7 @@ import 'package:intl/intl.dart';
 import 'dart:math';
 import 'package:intl/date_symbol_data_local.dart';
 
-// Versão Scout com poisson OK, com analise da efetividade
-// Iniciando poisson com nível de enfretamento
+// versão com nivel de enfrentamento pronto
 
 // Ponto de entrada da aplicação.
 void main() async {
@@ -330,20 +329,17 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
   final TextEditingController _stakeCtrl = TextEditingController();
   final TextEditingController _margemCtrl = TextEditingController();
   final TextEditingController _comentariosCtrl = TextEditingController();
-  final TextEditingController _playbookNomeCtrl = TextEditingController();
   DateTime _dataAposta = DateTime.now();
   int? _selectedCicloIdForForm;
   int _resultadoSelecionado = -1;
   int? _nivelConfiancaSelecionado;
   bool? _evPositivoSelecionado;
-  String? _playbookSelecionado;
 
   // ---------------------------
   // Estado dos Filtros
   // ---------------------------
   String? _filtroTipoSelecionado;
   String? _filtroCampeonatoSelecionado;
-  String? _filtroPlaybookSelecionado;
   int? _filtroConfiancaSelecionado;
   RangeValues? _filtroOddValues;
   List<Map<String, dynamic>> _apostasFiltradas = [];
@@ -354,10 +350,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
   String _analiseAssunto = 'Time';
   String _analiseMetrica = 'Retorno Financeiro';
   int? _rankingItemExpandido;
-
-  List<Map<String, dynamic>> _playbooks = [];
-  String? _playbookComparacaoA;
-  String? _playbookComparacaoB;
 
   // NOVOS ESTADOS PARA MÉTRICAS GLOBAIS
   List<Map<String, dynamic>> _drawdownHistory = [];
@@ -385,7 +377,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     _stakeCtrl.dispose();
     _margemCtrl.dispose();
     _comentariosCtrl.dispose();
-    _playbookNomeCtrl.dispose();
     super.dispose();
   }
 
@@ -407,7 +398,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     final Map<String, Map<String, dynamic>> porTime = {};
     final Map<String, Map<String, dynamic>> porCampeonato = {};
     final Map<String, Map<String, dynamic>> porTipo = {};
-    final Map<String, Map<String, dynamic>> porPlaybook = {};
     final Map<String, Map<String, dynamic>> porEV = {};
     final Map<String, Map<String, dynamic>> porConfianca = {};
     final Map<String, Map<String, dynamic>> porMargem = {};
@@ -436,7 +426,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       _atualizarSumario(porTime, aposta['time'] as String?, lucro);
       _atualizarSumario(porCampeonato, aposta['campeonato'] as String?, lucro);
       _atualizarSumario(porTipo, aposta['tipo'] as String?, lucro);
-      _atualizarSumario(porPlaybook, aposta['playbook'] as String?, lucro);
 
       // Novas chaves qualitativas
       // CORREÇÃO: Trata os 3 casos (true, false, null)
@@ -470,7 +459,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       'porTime': porTime,
       'porCampeonato': porCampeonato,
       'porTipo': porTipo,
-      'porPlaybook': porPlaybook,
       'porEV': porEV,
       'porConfianca': porConfianca,
       'porMargem': porMargem,
@@ -672,7 +660,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         "apostas": apostas,
         "historicoBanca": historicoBanca,
         "metas": metas,
-        "playbooks": _playbooks,
       };
       await file.writeAsString(jsonEncode(data));
       // Salva o dashboard (sem forçar) e recalcula as métricas globais
@@ -712,7 +699,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
             apostas = (decodedData["apostas"] ?? []).cast<Map<String, dynamic>>();
             historicoBanca = (decodedData["historicoBanca"] ?? []).cast<Map<String, dynamic>>();
             metas = (decodedData["metas"] ?? []).cast<Map<String, dynamic>>();
-            _playbooks = (decodedData["playbooks"] ?? []).cast<Map<String, dynamic>>();
           });
         } else {
           needsSave = true;
@@ -783,10 +769,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       resultado = resultado.where((a) => a['campeonato'] == _filtroCampeonatoSelecionado).toList();
     }
 
-    if (_filtroPlaybookSelecionado != null) {
-      resultado = resultado.where((a) => (a['playbook'] ?? 'Sem Playbook') == _filtroPlaybookSelecionado).toList();
-    }
-
     if (_filtroConfiancaSelecionado != null) {
       resultado = resultado.where((a) {
         final nc = a['nivelConfianca'];
@@ -812,7 +794,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       _filtroTipoSelecionado = null;
       _filtroCampeonatoSelecionado = null;
       _filtroConfiancaSelecionado = null;
-      _filtroPlaybookSelecionado = null;
       _filtroOddValues = RangeValues(_minOddDisponivel, _maxOddDisponivel);
       _aplicarFiltros();
     });
@@ -1095,7 +1076,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     int? margem,
     String? comentarios,
     bool? evPositivo,
-    String? playbook,
   }) {
     double lucroCalculado;
     if (resultado == 1) {
@@ -1121,7 +1101,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     if (margem != null) aposta["margem"] = margem;
     if (comentarios != null && comentarios.isNotEmpty) aposta["comentarios"] = comentarios;
     if (evPositivo != null) aposta["evPositivo"] = evPositivo;
-    if (playbook != null && playbook.isNotEmpty) aposta["playbook"] = playbook;
 
 
     setState(() {
@@ -1149,7 +1128,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     int? margem,
     String? comentarios,
     bool? evPositivo,
-    String? playbook,
   }) {
     final apostaIndex = apostas.indexWhere((a) => (a['id'] as num).toInt() == id);
     if (apostaIndex == -1) return;
@@ -1173,7 +1151,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       apostas[apostaIndex]['margem'] = margem;
       apostas[apostaIndex]['comentarios'] = comentarios;
       apostas[apostaIndex]['evPositivo'] = evPositivo;
-      apostas[apostaIndex]['playbook'] = (playbook == null || playbook.isEmpty) ? null : playbook;
 
       final int cicloId = (apostas[apostaIndex]['cicloId'] as num).toInt();
       _atualizarCicloDepoisDeAposta(cicloId);
@@ -1225,123 +1202,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       metas.removeWhere((m) => (m['id'] as num).toInt() == id);
       _salvarDados();
     });
-  }
-
-  // ---------------------------
-  // CRUD de Playbooks
-  // ---------------------------
-  void _salvarPlaybook({String? nomeOriginal}) {
-    final nome = _playbookNomeCtrl.text.trim();
-    if (nome.isEmpty) return;
-
-    final jaExiste = _playbooks.any((p) => (p['nome'] as String).toLowerCase() == nome.toLowerCase() && (nomeOriginal == null || (p['nome'] as String).toLowerCase() != nomeOriginal.toLowerCase()));
-    if (jaExiste) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Já existe um playbook com esse nome.')));
-      return;
-    }
-
-    setState(() {
-      if (nomeOriginal == null) {
-        _playbooks.add({'id': DateTime.now().millisecondsSinceEpoch.toString(), 'nome': nome, 'regras': <String>[]});
-      } else {
-        final idx = _playbooks.indexWhere((p) => p['nome'] == nomeOriginal);
-        if (idx != -1) {
-          _playbooks[idx]['nome'] = nome;
-          for (final aposta in apostas) {
-            if (aposta['playbook'] == nomeOriginal) aposta['playbook'] = nome;
-          }
-        }
-      }
-    });
-    _playbookNomeCtrl.clear();
-    _salvarDados();
-  }
-
-  void _excluirPlaybook(String nome) async {
-    final ok = await _confirmDialog('Excluir Playbook', "Deseja excluir o playbook '$nome'? As apostas continuarão, mas ficarão sem playbook.");
-    if (ok != true) return;
-
-    setState(() {
-      _playbooks.removeWhere((p) => p['nome'] == nome);
-      for (final aposta in apostas) {
-        if (aposta['playbook'] == nome) aposta.remove('playbook');
-      }
-      if (_playbookSelecionado == nome) _playbookSelecionado = null;
-      if (_filtroPlaybookSelecionado == nome) _filtroPlaybookSelecionado = null;
-      if (_playbookComparacaoA == nome) _playbookComparacaoA = null;
-      if (_playbookComparacaoB == nome) _playbookComparacaoB = null;
-    });
-    _aplicarFiltros();
-    _salvarDados();
-  }
-
-  Map<String, dynamic> _calcularResumoPlaybook(String playbook) {
-    final lista = apostas.where((a) => ((a['playbook'] as String?) ?? 'Sem Playbook') == playbook).toList();
-    final total = lista.length;
-    final wins = lista.where((a) => (a['lucro'] as num).toDouble() > 0).length;
-    final lucro = lista.fold(0.0, (s, a) => s + (a['lucro'] as num).toDouble());
-    final totalStake = lista.fold(0.0, (s, a) => s + (a['stake'] as num).toDouble());
-    final roi = totalStake > 0 ? (lucro / totalStake) * 100 : 0.0;
-    final wr = total > 0 ? (wins / total) * 100 : 0.0;
-    return {'total': total, 'wins': wins, 'lucro': lucro, 'roi': roi, 'wr': wr};
-  }
-
-  Widget _buildComparacaoPlaybooksCard() {
-    final opcoes = ['Sem Playbook', ..._playbooks.map((p) => p['nome'] as String)];
-    if (opcoes.length < 2) return const SizedBox.shrink();
-
-    final a = _playbookComparacaoA ?? opcoes.first;
-    final b = _playbookComparacaoB ?? (opcoes.length > 1 ? opcoes[1] : opcoes.first);
-    final ra = _calcularResumoPlaybook(a);
-    final rb = _calcularResumoPlaybook(b);
-
-    Widget bloco(String titulo, Map<String, dynamic> r, Color cor) {
-      return Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: cor.withOpacity(0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: cor.withOpacity(0.3))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(titulo, style: TextStyle(fontWeight: FontWeight.bold, color: cor)),
-            const SizedBox(height: 6),
-            Text('Apostas: ${r['total']}'),
-            Text('Win rate: ${(r['wr'] as double).toStringAsFixed(1)}%'),
-            Text('Lucro: R\$ ${(r['lucro'] as double).toStringAsFixed(2)}'),
-            Text('ROI: ${(r['roi'] as double).toStringAsFixed(2)}%'),
-          ]),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Comparação de Estratégias (Playbooks)', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: a,
-                items: opcoes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                onChanged: (v) => setState(() => _playbookComparacaoA = v),
-                decoration: const InputDecoration(labelText: 'Estratégia A'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: b,
-                items: opcoes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                onChanged: (v) => setState(() => _playbookComparacaoB = v),
-                decoration: const InputDecoration(labelText: 'Estratégia B'),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [bloco(a, ra, Colors.indigo), const SizedBox(width: 8), bloco(b, rb, Colors.teal)]),
-        ]),
-      ),
-    );
   }
 
   // ---------------------------
@@ -1794,7 +1654,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     final margemCtrl = TextEditingController(text: apostaParaEditar['margem']?.toString() ?? '');
     final comentariosCtrl = TextEditingController(text: apostaParaEditar['comentarios'] ?? '');
     bool? evPositivo = apostaParaEditar['evPositivo'] as bool?;
-    String? playbookSelecionado = apostaParaEditar['playbook'] as String?;
 
     final bool? salvar = await showDialog<bool>(
       context: context,
@@ -1811,22 +1670,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   TextFormField(controller: timeCtrl, decoration: const InputDecoration(labelText: "Time")),
                   TextFormField(controller: oddCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Odd")),
                   TextFormField(controller: stakeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Stake")),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    decoration: const InputDecoration(labelText: "Playbook"),
-                    value: playbookSelecionado,
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text("Sem Playbook", style: TextStyle(color: Colors.grey)),
-                      ),
-                      ..._playbooks.map((p) => DropdownMenuItem<String?>(
-                        value: p['nome'] as String,
-                        child: Text(p['nome'] as String),
-                      )),
-                    ],
-                    onChanged: (v) => setDialogState(() => playbookSelecionado = v),
-                  ),
                   const SizedBox(height: 16),
 
                   // MODIFICADO: Dropdown agora aceita valor Nulo (int?)
@@ -1935,7 +1778,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         margem: margem,
         comentarios: comentarios,
         evPositivo: evPositivo,
-        playbook: playbookSelecionado,
       );
     }
   }
@@ -2007,9 +1849,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         break;
       case 'Campeonato':
         apostasDoItem = apostas.where((a) => (a['campeonato'] as String?) == nome).toList();
-        break;
-      case 'Playbook':
-        apostasDoItem = apostas.where((a) => ((a['playbook'] as String?) ?? 'Sem Playbook') == nome).toList();
         break;
       case 'Nível de Confiança':
         int? nivel;
@@ -2348,9 +2187,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       case 'Tipo de Aposta':
         chaveAgrupamento = 'tipo';
         break;
-      case 'Playbook':
-        chaveAgrupamento = 'playbook';
-        break;
       case 'Nível de Confiança':
         chaveAgrupamento = 'nivelConfianca';
         break;
@@ -2381,11 +2217,8 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       // CORREÇÃO: Trata os 3 estados
       else if (chaveAgrupamento == 'evPositivo') {
         chave = aposta['evPositivo'] as bool?; // chave é bool? (true, false, ou null)
-      } else { // 'time', 'campeonato', 'tipo', 'comentarios', 'playbook'
+      } else { // 'time', 'campeonato', 'tipo', 'comentarios'
         chave = aposta[chaveAgrupamento] as String?;
-        if (chaveAgrupamento == 'playbook') {
-          chave = (chave == null || chave.isEmpty) ? 'Sem Playbook' : chave;
-        }
         if (chave == null || (chave is String && chave.isEmpty)) continue;
       }
 
@@ -3607,7 +3440,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   'Time',
                   'Campeonato',
                   'Tipo de Aposta',
-                  'Playbook',
                   'Nível de Confiança',
                   'Margem',
                   'Comentários',
@@ -3982,18 +3814,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                 ),
                 const SizedBox(height: 8),
 
-                DropdownButtonFormField<String>(
-                  value: _filtroPlaybookSelecionado,
-                  hint: const Text("Filtrar por playbook"),
-                  isExpanded: true,
-                  items: (["Sem Playbook", ..._playbooks.map((p) => p['nome'] as String)]).toSet().map((nome) => DropdownMenuItem(value: nome, child: Text(nome))).toList(),
-                  onChanged: (val) { setState(() { _filtroPlaybookSelecionado = val; _aplicarFiltros(); }); },
-                  decoration: InputDecoration(
-                    suffixIcon: _filtroPlaybookSelecionado != null ? IconButton(icon: const Icon(Icons.clear), onPressed: (){ setState(() { _filtroPlaybookSelecionado = null; _aplicarFiltros(); }); },) : null,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
                 DropdownButtonFormField<int>(
                   value: _filtroConfiancaSelecionado,
                   hint: const Text("Filtrar por nível de confiança"),
@@ -4028,9 +3848,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                 ),
                 const Divider(height: 30),
 
-                _buildComparacaoPlaybooksCard(),
-                const SizedBox(height: 8),
-
                 const Text('Resultados Gerais e Filtrados', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 Card(child: ListTile(title: const Text("Lucro total (Filtrado)"), subtitle: Text("R\$ ${_calcularLucroTotal(_apostasFiltradas).toStringAsFixed(2)}"))),
@@ -4052,12 +3869,11 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                   final margemTxt = (a['margem'] != null) ? " • Margem: ${a['margem']}" : "";
                   final comentTxt = (a['comentarios'] != null && (a['comentarios'] as String).isNotEmpty) ? "\nComentário: ${a['comentarios']}" : "";
                   final evTxt = (a['evPositivo'] == true) ? " (EV+)" : "";
-                  final playbookTxt = (a['playbook'] != null && (a['playbook'] as String).isNotEmpty) ? " • Playbook: ${a['playbook']}" : "";
 
                   return ListTile(
                     title: Text("${a['tipo']}$evTxt • ${a['campeonato'] ?? ''}${time.isNotEmpty ? ' • $time' : ''}"),
                     subtitle: Text(
-                      "Stake: R\$ ${stake.toStringAsFixed(2)} • Odd: ${a['odd']} • Retorno: R\$ ${retorno.toStringAsFixed(2)}\nCiclo ${a['cicloId']} • Lucro: R\$ ${lucro.toStringAsFixed(2)} • Data: ${a['data'].toString().split('T').first}$nivelTxt$margemTxt$playbookTxt$comentTxt",
+                      "Stake: R\$ ${stake.toStringAsFixed(2)} • Odd: ${a['odd']} • Retorno: R\$ ${retorno.toStringAsFixed(2)}\nCiclo ${a['cicloId']} • Lucro: R\$ ${lucro.toStringAsFixed(2)} • Data: ${a['data'].toString().split('T').first}$nivelTxt$margemTxt$comentTxt",
                     ),
                     isThreeLine: comentTxt.isNotEmpty,
                     trailing: Icon(lucro > 0 ? Icons.check_circle : Icons.cancel, color: lucro > 0 ? Colors.green : Colors.red, size: 20),
@@ -4261,7 +4077,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                       margem: margem,
                       comentarios: comentarios,
                       evPositivo: _evPositivoSelecionado,
-                      playbook: _playbookSelecionado,
                     );
 
                     _tipoCtrl.clear();
@@ -4272,7 +4087,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                     _margemCtrl.clear();
                     _comentariosCtrl.clear();
                     _evPositivoSelecionado = null;
-                    _playbookSelecionado = null;
                     FocusScope.of(context).unfocus();
                   },
                   child: const Text("Registrar aposta"),
@@ -9903,9 +9717,6 @@ class _TelaDashboardState extends State<TelaDashboard> {
   DateTime? _startDate;
   DateTime? _endDate;
   String _filtroRapidoStatus = 'Todos'; // 'Todos', 'Green', 'Red', 'Sem Diário'
-  String? _filtroPlaybookPesquisa;
-  String? _playbookComparacaoPesquisaA;
-  String? _playbookComparacaoPesquisaB;
 
   final List<String> _criteriosPadrao = [
     'Time',
@@ -9914,8 +9725,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
     'ID da Aposta',
     'ID do Ciclo',
     'EV+ (Valor Esperado)',
-    'Status (Ganho/Perdido)',
-    'Playbook'
+    'Status (Ganho/Perdido)'
   ];
 
   bool _carregando = true;
@@ -10221,7 +10031,6 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 final lucro = (aposta['lucro'] as num).toDouble();
                 valor = lucro > 0 ? "Green (Ganho)" : (lucro < 0 ? "Red (Perdido)" : "Reembolso");
                 break;
-              case 'Playbook': valor = (aposta['playbook'] ?? 'Sem Playbook').toString(); break;
             }
 
             if (usarBuscaExata) {
@@ -10345,13 +10154,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
           matchRapido = obs.isEmpty;
         }
 
-        bool matchPlaybook = true;
-        if (_filtroPlaybookPesquisa != null) {
-          final pb = ((aposta['playbook'] as String?) ?? 'Sem Playbook');
-          matchPlaybook = pb == _filtroPlaybookPesquisa;
-        }
-
-        return matchPrincipal && matchData && matchRapido && matchPlaybook;
+        return matchPrincipal && matchData && matchRapido;
       }).toList();
     });
   }
@@ -10384,7 +10187,6 @@ class _TelaDashboardState extends State<TelaDashboard> {
         case 'Tipo de Aposta': valor = aposta['tipo']; break;
         case 'ID da Aposta': valor = aposta['id'].toString(); break;
         case 'ID do Ciclo': valor = aposta['cicloId'].toString(); break;
-        case 'Playbook': valor = (aposta['playbook'] ?? 'Sem Playbook').toString(); break;
       }
       if (valor != null && valor.toLowerCase().contains(qLower)) opcoes.add(valor);
     }
@@ -10946,24 +10748,12 @@ class _TelaDashboardState extends State<TelaDashboard> {
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: _filtroPlaybookPesquisa,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Filtrar por Playbook', border: OutlineInputBorder()),
-                items: (['Sem Playbook', ..._apostas.map((a) => (a['playbook'] ?? 'Sem Playbook').toString()).toSet().toList()]
-                    .toSet()
-                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                    .toList()),
-                onChanged: (v) => setState(() { _filtroPlaybookPesquisa = v; _aplicarTodosFiltros(); }),
-              ),
             ],
           ),
         ),
 
         // === KPI RESUMO ===
         _buildResumoVisual(),
-        _buildComparacaoPlaybookPesquisa(),
 
         // === LISTA DE APOSTAS ===
         Expanded(
@@ -11181,61 +10971,6 @@ class _TelaDashboardState extends State<TelaDashboard> {
     );
   }
 
-  Widget _buildComparacaoPlaybookPesquisa() {
-    final opcoes = ['Sem Playbook', ..._apostas.map((a) => (a['playbook'] ?? 'Sem Playbook').toString()).toSet().toList()];
-    if (opcoes.length < 2) return const SizedBox.shrink();
-
-    final a = _playbookComparacaoPesquisaA ?? opcoes.first;
-    final b = _playbookComparacaoPesquisaB ?? (opcoes.length > 1 ? opcoes[1] : opcoes.first);
-
-    Map<String, dynamic> resumo(String pb) {
-      final lista = _apostas.where((ap) => ((ap['playbook'] as String?) ?? 'Sem Playbook') == pb).toList();
-      final total = lista.length;
-      final wins = lista.where((ap) => (ap['lucro'] as num).toDouble() > 0).length;
-      final lucro = lista.fold(0.0, (s, ap) => s + (ap['lucro'] as num).toDouble());
-      final wr = total > 0 ? (wins / total) * 100 : 0.0;
-      return {'total': total, 'lucro': lucro, 'wr': wr};
-    }
-
-    final ra = resumo(a);
-    final rb = resumo(b);
-
-    Widget box(String nome, Map<String, dynamic> r, Color cor) {
-      return Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: cor.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: cor.withOpacity(0.3))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(nome, style: TextStyle(fontWeight: FontWeight.bold, color: cor)),
-            Text('Apostas: ${r['total']}'),
-            Text('Winrate: ${(r['wr'] as double).toStringAsFixed(1)}%'),
-            Text('Lucro: R\$ ${(r['lucro'] as double).toStringAsFixed(2)}'),
-          ]),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Comparar Estratégias (Playbook)', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(children: [
-              Expanded(child: DropdownButtonFormField<String>(value: a, items: opcoes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(), onChanged: (v) => setState(() => _playbookComparacaoPesquisaA = v), decoration: const InputDecoration(labelText: 'A'))),
-              const SizedBox(width: 8),
-              Expanded(child: DropdownButtonFormField<String>(value: b, items: opcoes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(), onChanged: (v) => setState(() => _playbookComparacaoPesquisaB = v), decoration: const InputDecoration(labelText: 'B'))),
-            ]),
-            const SizedBox(height: 8),
-            Row(children: [box(a, ra, Colors.indigo), const SizedBox(width: 8), box(b, rb, Colors.teal)]),
-          ]),
-        ),
-      ),
-    );
-  }
-
   Widget _buildResumoVisual() {
     if (_apostasFiltradas.isEmpty) return const SizedBox.shrink();
 
@@ -11344,7 +11079,6 @@ class _TelaDashboardState extends State<TelaDashboard> {
                       const SizedBox(height: 6),
                       Text(aposta['time'] ?? 'Time', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
                       Text("${aposta['tipo']} @ ${aposta['odd']}", style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-                      Text('Playbook: ${((aposta['playbook'] as String?) ?? 'Sem Playbook')}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -18524,7 +18258,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
 
 
 
