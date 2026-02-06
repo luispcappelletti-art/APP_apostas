@@ -6591,6 +6591,403 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     };
   }
 
+  Map<String, dynamic> _calcularResumoApostasIA(List<Map<String, dynamic>> apostas) {
+    final total = apostas.length;
+    int wins = 0;
+    int losses = 0;
+    int voids = 0;
+    double totalStake = 0.0;
+    double totalLucro = 0.0;
+    double somaOdds = 0.0;
+    int oddsValidas = 0;
+
+    for (final a in apostas) {
+      final lucro = (a['lucro'] as num?)?.toDouble() ?? 0.0;
+      final stake = (a['stake'] as num?)?.toDouble() ?? 0.0;
+      final odd = num.tryParse(a['odd']?.toString() ?? '')?.toDouble();
+
+      totalLucro += lucro;
+      totalStake += stake;
+      if (odd != null && odd > 0) {
+        somaOdds += odd;
+        oddsValidas++;
+      }
+
+      if (lucro > 0) {
+        wins++;
+      } else if (lucro < 0) {
+        losses++;
+      } else {
+        voids++;
+      }
+    }
+
+    final double yieldPct = totalStake > 0 ? (totalLucro / totalStake) * 100 : 0.0;
+    final double avgStake = total > 0 ? totalStake / total : 0.0;
+    final double avgOdd = oddsValidas > 0 ? somaOdds / oddsValidas : 0.0;
+    final double avgLucro = total > 0 ? totalLucro / total : 0.0;
+    final double winRate = total > 0 ? (wins / total) * 100 : 0.0;
+
+    final double grossProfit = apostas.where((a) => (a['lucro'] as num?)?.toDouble() ?? 0.0 > 0)
+        .fold(0.0, (s, a) => s + (a['lucro'] as num).toDouble());
+    final double grossLoss = apostas.where((a) => (a['lucro'] as num?)?.toDouble() ?? 0.0 < 0)
+        .fold(0.0, (s, a) => s + ((a['lucro'] as num).abs()).toDouble());
+    final double profitFactor = grossLoss == 0 ? (grossProfit > 0 ? 999.0 : 0.0) : (grossProfit / grossLoss);
+
+    int maxWinStreak = 0;
+    int maxLoseStreak = 0;
+    int currentW = 0;
+    int currentL = 0;
+    final sortedApostas = List<Map<String, dynamic>>.from(apostas)
+      ..sort((a, b) => (a['data'] ?? '').compareTo(b['data'] ?? ''));
+    for (final a in sortedApostas) {
+      final l = (a['lucro'] as num?)?.toDouble() ?? 0.0;
+      if (l > 0) {
+        currentW++;
+        currentL = 0;
+        if (currentW > maxWinStreak) maxWinStreak = currentW;
+      } else if (l < 0) {
+        currentL++;
+        currentW = 0;
+        if (currentL > maxLoseStreak) maxLoseStreak = currentL;
+      }
+    }
+
+    return {
+      'totalApostas': total,
+      'wins': wins,
+      'losses': losses,
+      'voids': voids,
+      'winRate': winRate,
+      'totalStake': totalStake,
+      'totalLucro': totalLucro,
+      'yieldPct': yieldPct,
+      'avgStake': avgStake,
+      'avgOdd': avgOdd,
+      'avgLucro': avgLucro,
+      'profitFactor': profitFactor >= 999 ? 'Infinito' : profitFactor.toStringAsFixed(2),
+      'maxWinStreak': maxWinStreak,
+      'maxLoseStreak': maxLoseStreak,
+    };
+  }
+
+  Map<String, dynamic> _avaliarQualidadeDadosIA(List<Map<String, dynamic>> apostas) {
+    final total = apostas.length;
+    int semData = 0;
+    int semOdd = 0;
+    int semStake = 0;
+    int semLucro = 0;
+    int semTime = 0;
+    int semTipo = 0;
+    int semCampeonato = 0;
+    int semNivelConfianca = 0;
+    int semEV = 0;
+
+    for (final a in apostas) {
+      if ((a['data']?.toString() ?? '').isEmpty) semData++;
+      if (num.tryParse(a['odd']?.toString() ?? '') == null) semOdd++;
+      if (num.tryParse(a['stake']?.toString() ?? '') == null) semStake++;
+      if (num.tryParse(a['lucro']?.toString() ?? '') == null) semLucro++;
+      if ((a['time']?.toString() ?? '').isEmpty) semTime++;
+      if ((a['tipo']?.toString() ?? '').isEmpty) semTipo++;
+      if ((a['campeonato']?.toString() ?? '').isEmpty) semCampeonato++;
+      if (a['nivelConfianca'] == null) semNivelConfianca++;
+      if (a['evPositivo'] == null) semEV++;
+    }
+
+    double pct(int count) => total > 0 ? (count / total) * 100 : 0.0;
+
+    return {
+      'totalApostas': total,
+      'camposAusentes': {
+        'data': {'count': semData, 'pct': pct(semData)},
+        'odd': {'count': semOdd, 'pct': pct(semOdd)},
+        'stake': {'count': semStake, 'pct': pct(semStake)},
+        'lucro': {'count': semLucro, 'pct': pct(semLucro)},
+        'time': {'count': semTime, 'pct': pct(semTime)},
+        'tipo': {'count': semTipo, 'pct': pct(semTipo)},
+        'campeonato': {'count': semCampeonato, 'pct': pct(semCampeonato)},
+        'nivelConfianca': {'count': semNivelConfianca, 'pct': pct(semNivelConfianca)},
+        'evPositivo': {'count': semEV, 'pct': pct(semEV)},
+      }
+    };
+  }
+
+  Map<String, dynamic> _resumirSegmentosIA(List<Map<String, dynamic>> apostas, String campo, {int minApostas = 5}) {
+    final Map<String, Map<String, dynamic>> stats = {};
+
+    for (final a in apostas) {
+      dynamic raw = a[campo];
+      if (raw == null) continue;
+      if (raw is bool) raw = raw ? "Sim" : "Não";
+      final key = raw.toString().trim();
+      if (key.isEmpty) continue;
+
+      stats.putIfAbsent(key, () => {
+        'total': 0,
+        'wins': 0,
+        'lucro': 0.0,
+        'stake': 0.0,
+      });
+
+      final entry = stats[key]!;
+      entry['total'] = (entry['total'] as int) + 1;
+      final lucro = (a['lucro'] as num?)?.toDouble() ?? 0.0;
+      final stake = (a['stake'] as num?)?.toDouble() ?? 0.0;
+      entry['lucro'] = (entry['lucro'] as double) + lucro;
+      entry['stake'] = (entry['stake'] as double) + stake;
+      if (lucro > 0) entry['wins'] = (entry['wins'] as int) + 1;
+    }
+
+    List<Map<String, dynamic>> normalizar(List<MapEntry<String, Map<String, dynamic>>> entries) {
+      return entries.map((e) {
+        final total = e.value['total'] as int;
+        final wins = e.value['wins'] as int;
+        final lucro = e.value['lucro'] as double;
+        final stake = e.value['stake'] as double;
+        final winRate = total > 0 ? (wins / total) * 100 : 0.0;
+        final roi = stake > 0 ? (lucro / stake) * 100 : 0.0;
+        return {
+          'chave': e.key,
+          'total': total,
+          'wins': wins,
+          'winRate': winRate,
+          'lucro': lucro,
+          'roi': roi,
+        };
+      }).toList();
+    }
+
+    final filtrado = stats.entries.where((e) => (e.value['total'] as int) >= minApostas).toList();
+    filtrado.sort((a, b) {
+      final roiA = (a.value['stake'] as double) > 0 ? (a.value['lucro'] as double) / (a.value['stake'] as double) : 0.0;
+      final roiB = (b.value['stake'] as double) > 0 ? (b.value['lucro'] as double) / (b.value['stake'] as double) : 0.0;
+      return roiB.compareTo(roiA);
+    });
+
+    final top = filtrado.take(3).toList();
+    final bottom = filtrado.reversed.take(3).toList();
+
+    return {
+      'minApostas': minApostas,
+      'totalSegmentos': stats.length,
+      'top': normalizar(top),
+      'bottom': normalizar(bottom),
+    };
+  }
+
+  Map<String, dynamic> _resumirJanelaTemporalIA(List<Map<String, dynamic>> apostas, int dias) {
+    final limite = DateTime.now().subtract(Duration(days: dias));
+    final filtradas = apostas.where((a) {
+      final dataStr = a['data']?.toString() ?? '';
+      final data = DateTime.tryParse(dataStr);
+      return data != null && !data.isBefore(limite);
+    }).toList();
+
+    final resumo = _calcularResumoApostasIA(filtradas);
+    resumo['dias'] = dias;
+    resumo['totalApostas'] = filtradas.length;
+    return resumo;
+  }
+
+  List<Map<String, dynamic>> _formatarHistoricoRecenteIA(List<Map<String, dynamic>> apostas, int limite) {
+    final ordenadas = List<Map<String, dynamic>>.from(apostas)
+      ..sort((a, b) => (b['data'] ?? '').compareTo(a['data'] ?? ''));
+    return ordenadas.take(limite).map((a) {
+      return {
+        'data': a['data'],
+        'time': a['time'],
+        'tipo': a['tipo'],
+        'campeonato': a['campeonato'],
+        'odd': a['odd'],
+        'stake': a['stake'],
+        'lucro': a['lucro'],
+        'nivelConfianca': a['nivelConfianca'],
+        'evPositivo': a['evPositivo'],
+        'margem': a['margem'],
+        'comentarios': a['comentarios'],
+      };
+    }).toList();
+  }
+
+  Future<Map<String, dynamic>> _carregarResumoConfiancaIA() async {
+    try {
+      final file = await _getConfiancaFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          final decoded = jsonDecode(content);
+          if (decoded is List) {
+            final list = decoded.cast<Map<String, dynamic>>();
+            final total = list.length;
+            double somaNotas = 0.0;
+            int notasAltas = 0;
+            for (final item in list) {
+              final nota = (item['nota'] as num?)?.toDouble() ?? 0.0;
+              somaNotas += nota;
+              if (nota >= 8) notasAltas++;
+            }
+            final media = total > 0 ? somaNotas / total : 0.0;
+            final ultimos = list..sort((a, b) => (b['data'] ?? '').compareTo(a['data'] ?? ''));
+            final ultimos10 = ultimos.take(10).map((e) {
+              return {
+                'data': e['data'],
+                'titulo': e['titulo'],
+                'nota': e['nota'],
+                'resultado': e['resultado'],
+                'arquivado': e['arquivado'],
+              };
+            }).toList();
+
+            return {
+              'totalCards': total,
+              'mediaNota': media,
+              'pctNotasAltas': total > 0 ? (notasAltas / total) * 100 : 0.0,
+              'ultimosCards': ultimos10,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao resumir confiança IA: $e");
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> _carregarResumoPoissonIA() async {
+    try {
+      final file = await _getPoissonCardsFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          final decoded = jsonDecode(content);
+          if (decoded is List) {
+            final list = decoded.cast<Map<String, dynamic>>();
+            final total = list.length;
+            final ordenadas = list..sort((a, b) => (b['data'] ?? '').compareTo(a['data'] ?? ''));
+            final ultimos5 = ordenadas.take(5).map((e) {
+              return {
+                'data': e['data'],
+                'campeonato': e['campeonato'],
+                'mandante': e['mandante'],
+                'visitante': e['visitante'],
+                'resultados': e['resultados'],
+                'linkedBetId': e['linkedBetId'],
+              };
+            }).toList();
+            return {
+              'totalCards': total,
+              'ultimosCards': ultimos5,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro ao resumir Poisson IA: $e");
+    }
+    return {};
+  }
+
+  Map<String, dynamic> _resumirScoutIA() {
+    final totalPartidas = _scoutPartidas.length;
+    final totalLigas = _scoutLigas.length;
+    final ultimasPartidas = _scoutPartidas.take(5).map((p) {
+      return {
+        'data': p['data'],
+        'campeonato': p['campeonato'],
+        'mandante': p['mandante'],
+        'visitante': p['visitante'],
+        'placar': p['placar'],
+      };
+    }).toList();
+    return {
+      'totalPartidas': totalPartidas,
+      'totalLigas': totalLigas,
+      'ultimasPartidas': ultimasPartidas,
+    };
+  }
+
+  String _montarPromptAnaliseAposta({
+    required Map<String, dynamic> apostaAtual,
+    required Map<String, dynamic> dashboardData,
+    required Map<String, dynamic> metricasAvancadas,
+    required Map<String, dynamic> statsEspecificas,
+    required Map<String, dynamic> configData,
+    required Map<String, dynamic> resumoApostas,
+    required Map<String, dynamic> qualidadeDados,
+    required Map<String, dynamic> segmentacoes,
+    required Map<String, dynamic> janelasTempo,
+    required Map<String, dynamic> diarioData,
+    required Map<String, dynamic> confiancaResumo,
+    required Map<String, dynamic> poissonResumo,
+    required Map<String, dynamic> scoutResumo,
+    required List<Map<String, dynamic>> historicoRecente,
+    required String queryDaIA,
+  }) {
+    return """
+Você é um analista profissional de apostas esportivas e gestão de risco.
+Regras:
+- Use apenas os dados fornecidos. Não invente estatísticas ou notícias externas.
+- Se algum dado estiver ausente, indique claramente e explique o impacto na análise.
+- Priorize amostras maiores e evite conclusões fortes com poucos dados.
+
+Formato de resposta:
+1) Diagnóstico rápido (3-5 bullets).
+2) Padrões fortes e fracos (com dados de suporte).
+3) Riscos atuais (técnicos e emocionais).
+4) Recomendação prática: stake/abstenção, checklist e ajustes.
+5) Nota final (0-10) + justificativa objetiva.
+
+=== DADOS DA APOSTA ATUAL ===
+${jsonEncode(apostaAtual)}
+
+=== REGRAS INTERNAS DO USUÁRIO ===
+${jsonEncode(_regrasAposta)}
+
+=== SUMÁRIO FINANCEIRO (Dashboard) ===
+${jsonEncode(dashboardData)}
+
+=== MÉTRICAS AVANÇADAS ===
+${jsonEncode(metricasAvancadas)}
+
+=== ESTATÍSTICAS ESPECÍFICAS (Histórico agregado por time/campeonato/tipo) ===
+${jsonEncode(statsEspecificas)}
+
+=== RESUMO GERAL DO HISTÓRICO ===
+${jsonEncode(resumoApostas)}
+
+=== QUALIDADE DOS DADOS ===
+${jsonEncode(qualidadeDados)}
+
+=== SEGMENTAÇÕES (Top/Bottom por ROI) ===
+${jsonEncode(segmentacoes)}
+
+=== JANELAS TEMPORAIS (performance recente) ===
+${jsonEncode(janelasTempo)}
+
+=== CONTEXTO EMOCIONAL / DIÁRIO ===
+${jsonEncode(diarioData)}
+
+=== CONFIANÇA (cards) ===
+${jsonEncode(confiancaResumo)}
+
+=== POISSON (cards) ===
+${jsonEncode(poissonResumo)}
+
+=== SCOUT DATABASE (resumo) ===
+${jsonEncode(scoutResumo)}
+
+=== CONFIGURAÇÕES DO USUÁRIO ===
+${jsonEncode(configData)}
+
+=== HISTÓRICO RECENTE (últimas apostas) ===
+${jsonEncode(historicoRecente)}
+
+=== TAREFA ===
+$queryDaIA
+""";
+  }
+
   Future<void> _compartilharPromptIA({String? customQuery}) async {
     setState(() => _carregando = true);
     try {
@@ -6600,6 +6997,9 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       final configData = await _carregarConfig();
       // NOVO: Carregar Estatísticas Globais
       final globalStats = await _carregarEstatisticasGlobais();
+      final diarioData = await _carregarDadosDiarioIA();
+      final confiancaResumo = await _carregarResumoConfiancaIA();
+      final poissonResumo = await _carregarResumoPoissonIA();
 
       if (apostas.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Histórico de apostas está vazio.")));
@@ -6693,29 +7093,51 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         'desempenhoRealFlat': _calcularMetricasFlat(apostas), // NOVO
       };
 
+      final resumoApostas = _calcularResumoApostasIA(apostas);
+      final qualidadeDados = _avaliarQualidadeDadosIA(apostas);
+      final segmentacoes = {
+        'porCampeonato': _resumirSegmentosIA(apostas, 'campeonato'),
+        'porTipo': _resumirSegmentosIA(apostas, 'tipo'),
+        'porTime': _resumirSegmentosIA(apostas, 'time'),
+        'porNivelConfianca': _resumirSegmentosIA(apostas, 'nivelConfianca', minApostas: 3),
+        'porEV': _resumirSegmentosIA(apostas, 'evPositivo', minApostas: 3),
+      };
+      final janelasTempo = {
+        'ultimos7d': _resumirJanelaTemporalIA(apostas, 7),
+        'ultimos30d': _resumirJanelaTemporalIA(apostas, 30),
+        'ultimos90d': _resumirJanelaTemporalIA(apostas, 90),
+      };
+      final historicoRecente = _formatarHistoricoRecenteIA(apostas, 25);
+      final scoutResumo = _resumirScoutIA();
+
       final queryDaIA = customQuery ?? """
-Com base em todos os dados fornecidos, faça uma análise detalhada da aposta proposta. Avalie os seguintes pontos:
-O cálcula de EV será de fato calculado em todas apostas, mas isso no momento não importante para você então faça sua analise sem considerar isso.
-1. O desempenho histórico do usuário com os times envolvidos (use 'Estatísticas Globais Específicas').
-2. O sucesso do usuário com este tipo de aposta, usando principalmente: desempenhoRealFlat.
-3. O desempenho do usuário neste campeonato, usando principalmente: desempenhoRealFlat.
-4. O histórico de acertos do usuário em apostas com odds similares.
-8. (Google Search) Retrospecto recente.
-9. (Google Search) Desfalques e notícias.
-10. Nota de 1 a 10.
+Com base em todos os dados fornecidos, faça uma análise detalhada da aposta proposta.
+Priorize dados internos (histórico, métricas e contexto emocional) e evite suposições externas.
+Avalie:
+1) Desempenho histórico do usuário com os times envolvidos.
+2) Desempenho por tipo de aposta e campeonato (use segmentações + desempenhoRealFlat).
+3) Histórico em odds semelhantes e em janelas temporais recentes.
+4) Riscos detectados pela qualidade dos dados e possíveis vieses emocionais.
+5) Nota final de 0 a 10 e recomendação prática.
 """;
 
-      final prompt = """
-Você é um analista de apostas esportivas.
-**Aposta:** ${jsonEncode(apostaAtual)}
-**Regras:** ${jsonEncode(_regrasAposta)}
-**Sumário:** ${jsonEncode(dashboardData)}
-**Métricas Avançadas:** ${jsonEncode(metricasAvancadas)}
-**Estatísticas Globais Específicas (Histórico Agregado):** ${jsonEncode(statsEspecificas)}
-**Config:** ${jsonEncode(configData)}
-**Histórico Recente:** ${jsonEncode(apostas.take(20).toList())}
-**Tarefa:** $queryDaIA
-""";
+      final prompt = _montarPromptAnaliseAposta(
+        apostaAtual: apostaAtual,
+        dashboardData: dashboardData,
+        metricasAvancadas: metricasAvancadas,
+        statsEspecificas: statsEspecificas,
+        configData: configData,
+        resumoApostas: resumoApostas,
+        qualidadeDados: qualidadeDados,
+        segmentacoes: segmentacoes,
+        janelasTempo: janelasTempo,
+        diarioData: diarioData,
+        confiancaResumo: confiancaResumo,
+        poissonResumo: poissonResumo,
+        scoutResumo: scoutResumo,
+        historicoRecente: historicoRecente,
+        queryDaIA: queryDaIA,
+      );
 
       await Share.share(prompt, subject: "Prompt de Análise de Aposta");
 
@@ -6733,6 +7155,9 @@ Você é um analista de apostas esportivas.
     final configData = await _carregarConfig();
     // NOVO: Carregar Estatísticas Globais
     final globalStats = await _carregarEstatisticasGlobais();
+    final diarioData = await _carregarDadosDiarioIA();
+    final confiancaResumo = await _carregarResumoConfiancaIA();
+    final poissonResumo = await _carregarResumoPoissonIA();
 
     if (apostas.isEmpty) {
       setState(() => _analiseIAResultado = "Seu histórico de apostas está vazio.");
@@ -6823,70 +7248,123 @@ Você é um analista de apostas esportivas.
       'desempenhoRealFlat': _calcularMetricasFlat(apostas), // NOVO
     };
 
+    final resumoApostas = _calcularResumoApostasIA(apostas);
+    final qualidadeDados = _avaliarQualidadeDadosIA(apostas);
+    final segmentacoes = {
+      'porCampeonato': _resumirSegmentosIA(apostas, 'campeonato'),
+      'porTipo': _resumirSegmentosIA(apostas, 'tipo'),
+      'porTime': _resumirSegmentosIA(apostas, 'time'),
+      'porNivelConfianca': _resumirSegmentosIA(apostas, 'nivelConfianca', minApostas: 3),
+      'porEV': _resumirSegmentosIA(apostas, 'evPositivo', minApostas: 3),
+    };
+    final janelasTempo = {
+      'ultimos7d': _resumirJanelaTemporalIA(apostas, 7),
+      'ultimos30d': _resumirJanelaTemporalIA(apostas, 30),
+      'ultimos90d': _resumirJanelaTemporalIA(apostas, 90),
+    };
+    final historicoRecente = _formatarHistoricoRecenteIA(apostas, 25);
+    final scoutResumo = _resumirScoutIA();
+
     final String queryDaIA = customQuery ?? """
-    Com base em todos os dados fornecidos, faça uma análise detalhada da aposta proposta. Avalie os seguintes pontos:
-O cálcula de EV será de fato calculado em todas apostas, mas isso no momento não importante para você então faça sua analise sem considerar isso.
-1. O desempenho histórico do usuário com os times envolvidos (use 'Estatísticas Globais Específicas').
-2. O sucesso do usuário com este tipo de aposta, usando principalmente: desempenhoRealFlat.
-3. O desempenho do usuário neste campeonato, usando principalmente: desempenhoRealFlat.
-4. O histórico de acertos do usuário em apostas com odds similares.
-8. (Google Search) Retrospecto recente.
-9. (Google Search) Desfalques e notícias.
-10. Nota de 1 a 10.
+Com base em todos os dados fornecidos, faça uma análise detalhada da aposta proposta.
+Priorize dados internos (histórico, métricas e contexto emocional) e evite suposições externas.
+Avalie:
+1) Desempenho histórico do usuário com os times envolvidos.
+2) Desempenho por tipo de aposta e campeonato (use segmentações + desempenhoRealFlat).
+3) Histórico em odds semelhantes e em janelas temporais recentes.
+4) Riscos detectados pela qualidade dos dados e possíveis vieses emocionais.
+5) Nota final de 0 a 10 e recomendação prática.
 """;
 
-    final prompt = """
-    Analista de apostas.
-    Aposta: ${jsonEncode(apostaAtual)}
-    Regras: ${jsonEncode(_regrasAposta)}
-    Sumário: ${jsonEncode(dashboardData)}
-    Métricas: ${jsonEncode(metricasAvancadas)}
-    Estatísticas Globais Específicas: ${jsonEncode(statsEspecificas)}
-    Config: ${jsonEncode(configData)}
-    Histórico Recente: ${jsonEncode(apostas.take(20).toList())}
-    Tarefa: $queryDaIA
-    """;
+    final prompt = _montarPromptAnaliseAposta(
+      apostaAtual: apostaAtual,
+      dashboardData: dashboardData,
+      metricasAvancadas: metricasAvancadas,
+      statsEspecificas: statsEspecificas,
+      configData: configData,
+      resumoApostas: resumoApostas,
+      qualidadeDados: qualidadeDados,
+      segmentacoes: segmentacoes,
+      janelasTempo: janelasTempo,
+      diarioData: diarioData,
+      confiancaResumo: confiancaResumo,
+      poissonResumo: poissonResumo,
+      scoutResumo: scoutResumo,
+      historicoRecente: historicoRecente,
+      queryDaIA: queryDaIA,
+    );
 
     await _chamarGeminiAPI(prompt);
   }
 
   // MODIFICADO: Agora aceita estatísticas globais
-  String _construirPromptAnaliseGeral(Map<String, dynamic> dashboardData, Map<String, dynamic> diarioData, Map<String, dynamic> flatStats, Map<String, dynamic> globalStats) {
+  String _construirPromptAnaliseGeral({
+    required Map<String, dynamic> dashboardData,
+    required Map<String, dynamic> diarioData,
+    required Map<String, dynamic> flatStats,
+    required Map<String, dynamic> globalStats,
+    required Map<String, dynamic> resumoApostas,
+    required Map<String, dynamic> qualidadeDados,
+    required Map<String, dynamic> segmentacoes,
+    required Map<String, dynamic> janelasTempo,
+    required Map<String, dynamic> confiancaResumo,
+    required Map<String, dynamic> poissonResumo,
+    required Map<String, dynamic> scoutResumo,
+  }) {
     return """
-    Atue como um analista de desempenho esportivo e comportamental profissional (Coach de Apostas).
-    Faça uma análise profunda cruzando o desempenho financeiro com o contexto pessoal e emocional do apostador.
-    Explicações sobre os dados:
-    Nível de confiança: O nível é gerado cruzando dados do meu histórico, analise de IA, Poisson, comentários das apostas anteriores no mesmo time
-    histórico do confronto direto e se existe alguma desconfiança exra ou não ( tudo isso gera uma nota )
-    Margem: Registrado após o jogo é o quanto sobrou de gols a favor ou faltou se meu time venceu por 2x0 ( margem +1)
-    Comentários: Breve descrição de como foi a aposta ( os registros pesados ficam depois em outro lugar )
-    EV+ : Cálculo Poisson, com ajustes pessoais para definir se uma aposta tem ou não valor esperado positivo.
-    
-    Metas: São definidas para um periodo mas o fato de estar em 0% não significa que não está em andamento.
-    
+Atue como um analista de desempenho esportivo e comportamental profissional (Coach de Apostas).
+Regras:
+- Use apenas os dados fornecidos. Não invente dados externos.
+- Se houver lacunas, indique claramente.
 
-    === 1. DADOS DE PERFORMANCE (Dashboard Financeiro) ===
-    ${jsonEncode(dashboardData)}
-    
-    === DADOS DE PERFORMANCE REAL (Flat Stake - Sem influência do valor da aposta) ===
-    Lucro em Unidades: ${flatStats['flatProfit'].toStringAsFixed(2)}u
-    ROI (Flat): ${flatStats['flatROI'].toStringAsFixed(2)}%
+Explicações rápidas dos dados:
+- Nível de confiança: nota baseada em histórico, IA, Poisson, comentários e confronto direto.
+- Margem: diferença de gols percebida no pós-jogo.
+- EV+: cálculo Poisson ajustado com critérios pessoais.
+- Metas: em andamento mesmo quando 0% (interprete com cautela).
 
-    === 3. ESTATÍSTICAS GLOBAIS DE DESEMPENHO (Detalhado por Time/Liga/Tipo) ===
-    Utilize estes dados JSON para encontrar padrões específicos de onde o apostador ganha ou perde mais.
-    Dados: ${jsonEncode(globalStats)}
+=== 1. DADOS DE PERFORMANCE (Dashboard Financeiro) ===
+${jsonEncode(dashboardData)}
 
-    === 4. CONTEXTO PESSOAL (Diário de Bordo e Metas) ===
-    ${jsonEncode(diarioData)}
+=== 2. DESEMPENHO REAL (Flat Stake) ===
+Lucro em Unidades: ${flatStats['flatProfit'].toStringAsFixed(2)}u
+ROI (Flat): ${flatStats['flatROI'].toStringAsFixed(2)}%
 
-    === DIRETRIZES DA ANÁLISE ===
-    1. **Diagnóstico Financeiro:** Avalie ROI, gestão de banca e consistência baseada nos dados do Dashboard.
-    2. **Desempenho Real (Flat Stake):** Compare o desempenho financeiro com o desempenho real (flat stake). Se o flat stake for positivo e o financeiro negativo, alerte sobre a gestão de stake. Se ambos forem positivos, reforce a consistência.
-    3. **Padrões Específicos:** Busque nas 'Estatísticas Globais' quais campeonatos ou tipos de aposta são "buracos negros" (prejuízo constante) e quais são "minas de ouro". Cite nomes.
-    4. **Correlação Emocional:** Analise os "ultimos_eventos_diario". O estado emocional ou eventos recentes explicam alguma oscilação nos resultados?
-    5. **Status das Metas:** Verifique o "resumo_metas". A pressão por metas atrasadas ou a euforia de metas batidas está influenciando o risco?
-    6. **Conclusão:** Forneça 3 conselhos práticos focados em: Técnica, Mentalidade e Ajuste de Metas.
-    """;
+=== 3. RESUMO GERAL DO HISTÓRICO ===
+${jsonEncode(resumoApostas)}
+
+=== 4. QUALIDADE DOS DADOS ===
+${jsonEncode(qualidadeDados)}
+
+=== 5. ESTATÍSTICAS GLOBAIS (Time/Liga/Tipo) ===
+${jsonEncode(globalStats)}
+
+=== 6. SEGMENTAÇÕES (Top/Bottom por ROI) ===
+${jsonEncode(segmentacoes)}
+
+=== 7. JANELAS TEMPORAIS (performance recente) ===
+${jsonEncode(janelasTempo)}
+
+=== 8. CONTEXTO PESSOAL (Diário de Bordo e Metas) ===
+${jsonEncode(diarioData)}
+
+=== 9. CONFIANÇA (cards) ===
+${jsonEncode(confiancaResumo)}
+
+=== 10. POISSON (cards) ===
+${jsonEncode(poissonResumo)}
+
+=== 11. SCOUT DATABASE (resumo) ===
+${jsonEncode(scoutResumo)}
+
+=== DIRETRIZES DA ANÁLISE ===
+1. **Diagnóstico Financeiro:** Avalie ROI, gestão de banca e consistência baseada no dashboard.
+2. **Desempenho Real:** Compare financeiro vs. flat stake; destaque problemas de stake se houver divergência.
+3. **Padrões Específicos:** Identifique campeonatos/mercados com desempenho negativo e positivo. Cite nomes.
+4. **Correlação Emocional:** Analise eventos do diário e impactos nos resultados.
+5. **Status das Metas:** Explique se metas influenciam o risco assumido.
+6. **Plano de Ação:** 3 conselhos práticos (Técnica, Mentalidade, Gestão).
+""";
   }
 
   Future<void> _gerarAnaliseGeral() async {
@@ -6895,6 +7373,8 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
     final apostas = await _carregarApostas();
     // NOVO: Carregar stats
     final globalStats = await _carregarEstatisticasGlobais();
+    final confiancaResumo = await _carregarResumoConfiancaIA();
+    final poissonResumo = await _carregarResumoPoissonIA();
 
     if (dashboardData.isEmpty && diarioData.isEmpty && apostas.isEmpty) {
       setState(() => _analiseIAResultado = "Sem dados suficientes (Dashboard, Histórico ou Diário) para análise.");
@@ -6902,7 +7382,35 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
     }
 
     final flatStats = _calcularMetricasFlat(apostas);
-    final prompt = _construirPromptAnaliseGeral(dashboardData, diarioData, flatStats, globalStats);
+    final resumoApostas = _calcularResumoApostasIA(apostas);
+    final qualidadeDados = _avaliarQualidadeDadosIA(apostas);
+    final segmentacoes = {
+      'porCampeonato': _resumirSegmentosIA(apostas, 'campeonato'),
+      'porTipo': _resumirSegmentosIA(apostas, 'tipo'),
+      'porTime': _resumirSegmentosIA(apostas, 'time'),
+      'porNivelConfianca': _resumirSegmentosIA(apostas, 'nivelConfianca', minApostas: 3),
+      'porEV': _resumirSegmentosIA(apostas, 'evPositivo', minApostas: 3),
+    };
+    final janelasTempo = {
+      'ultimos7d': _resumirJanelaTemporalIA(apostas, 7),
+      'ultimos30d': _resumirJanelaTemporalIA(apostas, 30),
+      'ultimos90d': _resumirJanelaTemporalIA(apostas, 90),
+    };
+    final scoutResumo = _resumirScoutIA();
+
+    final prompt = _construirPromptAnaliseGeral(
+      dashboardData: dashboardData,
+      diarioData: diarioData,
+      flatStats: flatStats,
+      globalStats: globalStats,
+      resumoApostas: resumoApostas,
+      qualidadeDados: qualidadeDados,
+      segmentacoes: segmentacoes,
+      janelasTempo: janelasTempo,
+      confiancaResumo: confiancaResumo,
+      poissonResumo: poissonResumo,
+      scoutResumo: scoutResumo,
+    );
     await _chamarGeminiAPI(prompt);
   }
 
@@ -6914,6 +7422,8 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       final apostas = await _carregarApostas();
       // NOVO: Carregar stats
       final globalStats = await _carregarEstatisticasGlobais();
+      final confiancaResumo = await _carregarResumoConfiancaIA();
+      final poissonResumo = await _carregarResumoPoissonIA();
 
       if (dashboardData.isEmpty && diarioData.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sem dados suficientes.")));
@@ -6921,7 +7431,35 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       }
 
       final flatStats = _calcularMetricasFlat(apostas);
-      final prompt = _construirPromptAnaliseGeral(dashboardData, diarioData, flatStats, globalStats);
+      final resumoApostas = _calcularResumoApostasIA(apostas);
+      final qualidadeDados = _avaliarQualidadeDadosIA(apostas);
+      final segmentacoes = {
+        'porCampeonato': _resumirSegmentosIA(apostas, 'campeonato'),
+        'porTipo': _resumirSegmentosIA(apostas, 'tipo'),
+        'porTime': _resumirSegmentosIA(apostas, 'time'),
+        'porNivelConfianca': _resumirSegmentosIA(apostas, 'nivelConfianca', minApostas: 3),
+        'porEV': _resumirSegmentosIA(apostas, 'evPositivo', minApostas: 3),
+      };
+      final janelasTempo = {
+        'ultimos7d': _resumirJanelaTemporalIA(apostas, 7),
+        'ultimos30d': _resumirJanelaTemporalIA(apostas, 30),
+        'ultimos90d': _resumirJanelaTemporalIA(apostas, 90),
+      };
+      final scoutResumo = _resumirScoutIA();
+
+      final prompt = _construirPromptAnaliseGeral(
+        dashboardData: dashboardData,
+        diarioData: diarioData,
+        flatStats: flatStats,
+        globalStats: globalStats,
+        resumoApostas: resumoApostas,
+        qualidadeDados: qualidadeDados,
+        segmentacoes: segmentacoes,
+        janelasTempo: janelasTempo,
+        confiancaResumo: confiancaResumo,
+        poissonResumo: poissonResumo,
+        scoutResumo: scoutResumo,
+      );
       await Share.share(prompt, subject: "Prompt de Análise Geral + Diário");
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro: $e")));
