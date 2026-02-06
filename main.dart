@@ -371,7 +371,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tipoCtrl.addListener(_onFormularioMudou);
     _campeonatoCtrl.addListener(_onFormularioMudou);
     _timeCtrl.addListener(_onFormularioMudou);
@@ -1357,9 +1357,13 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     });
   }
 
-  Future<void> _mostrarDialogoPlaybook({Map<String, dynamic>? playbookParaEditar}) async {
-    final bool isEditing = playbookParaEditar != null;
-    _playbookNomeCtrl.text = playbookParaEditar?['nome']?.toString() ?? '';
+  Future<void> _mostrarDialogoPlaybook({
+    Map<String, dynamic>? playbookParaEditar,
+    bool duplicar = false,
+  }) async {
+    final bool isEditing = playbookParaEditar != null && !duplicar;
+    final String nomeOriginal = playbookParaEditar?['nome']?.toString() ?? '';
+    _playbookNomeCtrl.text = duplicar && nomeOriginal.isNotEmpty ? '$nomeOriginal (Cópia)' : nomeOriginal;
     _playbookCriteriosCtrl.text = playbookParaEditar?['criterios']?.toString() ?? '';
     final checklistAtual = ((playbookParaEditar?['checklist'] as List?) ?? const []).map((e) => e.toString()).join('\n');
     _playbookChecklistCtrl.text = checklistAtual;
@@ -1367,7 +1371,7 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
     final salvar = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(isEditing ? 'Editar Playbook' : 'Novo Playbook'),
+        title: Text(isEditing ? 'Editar Playbook' : (duplicar ? 'Duplicar Playbook' : 'Novo Playbook')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -3913,7 +3917,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
             Tab(text: "Análise"),
             Tab(text: "Apostas"),
             Tab(text: "Controle de Ciclos"),
-            Tab(text: "Metas"),
             Tab(text: "Configurações"),
           ],
         ),
@@ -4717,9 +4720,6 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
             ),
           ),
 
-          // Metas
-          _buildAbaMetas(),
-
           // ---------- Configurações ----------
           Padding(
             padding: const EdgeInsets.all(12),
@@ -4771,6 +4771,10 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.content_copy),
+                          onPressed: () => _mostrarDialogoPlaybook(playbookParaEditar: p, duplicar: true),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit),
                           onPressed: () => _mostrarDialogoPlaybook(playbookParaEditar: p),
@@ -9723,9 +9727,13 @@ class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateM
     );
   }
 
-  Future<void> _dialogAdicionarEditarPlaybook({Map<String, dynamic>? playbookExistente}) async {
-    final bool isEditing = playbookExistente != null;
-    final nomeCtrl = TextEditingController(text: playbookExistente?['nome']?.toString() ?? '');
+  Future<void> _dialogAdicionarEditarPlaybook({
+    Map<String, dynamic>? playbookExistente,
+    bool duplicar = false,
+  }) async {
+    final bool isEditing = playbookExistente != null && !duplicar;
+    final String nomeOriginal = playbookExistente?['nome']?.toString() ?? '';
+    final nomeCtrl = TextEditingController(text: duplicar && nomeOriginal.isNotEmpty ? '$nomeOriginal (Cópia)' : nomeOriginal);
     final estrategiaCtrl = TextEditingController(text: playbookExistente?['estrategia']?.toString() ?? '');
     final mercadoCtrl = TextEditingController(text: playbookExistente?['mercadoPrincipal']?.toString() ?? '');
     final gatilhosCtrl = TextEditingController(
@@ -9740,7 +9748,7 @@ class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateM
     await showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(isEditing ? 'Editar Playbook' : 'Novo Playbook'),
+        title: Text(isEditing ? 'Editar Playbook' : (duplicar ? 'Duplicar Playbook' : 'Novo Playbook')),
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
@@ -9885,13 +9893,17 @@ class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateM
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(child: Text(pb['nome']?.toString() ?? 'Sem nome', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                                IconButton(onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb), icon: const Icon(Icons.edit_outlined)),
-                                IconButton(onPressed: () => _removerPlaybook(pb), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
-                              ],
-                            ),
+                                Row(
+                                  children: [
+                                    Expanded(child: Text(pb['nome']?.toString() ?? 'Sem nome', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                                    IconButton(
+                                      onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb, duplicar: true),
+                                      icon: const Icon(Icons.content_copy),
+                                    ),
+                                    IconButton(onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb), icon: const Icon(Icons.edit_outlined)),
+                                    IconButton(onPressed: () => _removerPlaybook(pb), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                                  ],
+                                ),
                             if ((pb['estrategia']?.toString().isNotEmpty ?? false)) Text('Estratégia: ${pb['estrategia']}'),
                             if ((pb['mercadoPrincipal']?.toString().isNotEmpty ?? false)) Text('Mercado: ${pb['mercadoPrincipal']}'),
                             if ((pb['risco']?.toString().isNotEmpty ?? false)) Text('Risco: ${pb['risco']}'),
@@ -19151,11 +19163,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
-
-
-
-
 
 
 
