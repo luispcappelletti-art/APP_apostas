@@ -1580,6 +1580,15 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         '2.01 - 3.00': {'lucro': 0.0, 'total': 0, 'wins': 0},
         '3.01+':       {'lucro': 0.0, 'total': 0, 'wins': 0},
       };
+      final Map<String, Map<String, dynamic>> desempenhoPorDia = {
+        'Seg': {'lucro': 0.0, 'total': 0, 'wins': 0},
+        'Ter': {'lucro': 0.0, 'total': 0, 'wins': 0},
+        'Qua': {'lucro': 0.0, 'total': 0, 'wins': 0},
+        'Qui': {'lucro': 0.0, 'total': 0, 'wins': 0},
+        'Sex': {'lucro': 0.0, 'total': 0, 'wins': 0},
+        'Sáb': {'lucro': 0.0, 'total': 0, 'wins': 0},
+        'Dom': {'lucro': 0.0, 'total': 0, 'wins': 0},
+      };
 
       for(var a in apostas) {
         final odd = (a['odd'] as num).toDouble();
@@ -1592,7 +1601,26 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
         oddsStats[key]!['lucro'] += lucro;
         oddsStats[key]!['total']++;
         if(lucro > 0) oddsStats[key]!['wins']++;
+
+        final data = DateTime.tryParse(a['data'] ?? "");
+        if (data != null) {
+          const dias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+          final diaKey = dias[data.weekday - 1];
+          desempenhoPorDia[diaKey]!['lucro'] += lucro;
+          desempenhoPorDia[diaKey]!['total']++;
+          if (lucro > 0) desempenhoPorDia[diaKey]!['wins']++;
+        }
       }
+      final List<double> stakes = apostas.map((a) => (a['stake'] as num).toDouble()).toList()..sort();
+      final double stakeTotal = stakes.fold(0.0, (sum, value) => sum + value);
+      final double stakeMedia = stakes.isNotEmpty ? (stakeTotal / stakes.length) : 0.0;
+      final double stakeMin = stakes.isNotEmpty ? stakes.first : 0.0;
+      final double stakeMax = stakes.isNotEmpty ? stakes.last : 0.0;
+      final double stakeMediana = stakes.isNotEmpty
+          ? (stakes.length.isOdd
+          ? stakes[stakes.length ~/ 2]
+          : (stakes[(stakes.length ~/ 2) - 1] + stakes[stakes.length ~/ 2]) / 2)
+          : 0.0;
 
       // ---------------- ESCREVENDO O RELATÓRIO ----------------
 
@@ -1758,10 +1786,33 @@ class _TelaApostasState extends State<TelaApostas> with SingleTickerProviderStat
       sb.writeln(_analisarCategoria("Por Tipo de Aposta", "tipo"));
       sb.writeln(_analisarCategoria("Por Nível de Confiança", "nivelConfianca"));
       sb.writeln(_analisarCategoria("Por EV+ (Valor Esperado)", "evPositivo"));
+      sb.writeln(_analisarCategoria("Por Playbook", "playbookNome"));
+      sb.writeln(_analisarCategoria("Por Margem", "margem"));
       sb.writeln("");
 
-      // BLOCO 7: HISTÓRICO
-      sb.writeln("--- 7. HISTÓRICO RECENTE DE APOSTAS (Últimas 50) ---");
+      // BLOCO 7: CONSISTÊNCIA DE STAKE
+      sb.writeln("--- 7. CONSISTÊNCIA DE STAKE E VOLUME ---");
+      sb.writeln("Total de Apostas: ${apostas.length}");
+      sb.writeln("Stake Total (Giro): R\$ ${stakeTotal.toStringAsFixed(2)}");
+      sb.writeln("Stake Média: R\$ ${stakeMedia.toStringAsFixed(2)} | Mediana: R\$ ${stakeMediana.toStringAsFixed(2)}");
+      sb.writeln("Menor Stake: R\$ ${stakeMin.toStringAsFixed(2)} | Maior Stake: R\$ ${stakeMax.toStringAsFixed(2)}");
+      sb.writeln("");
+
+      // BLOCO 8: PERFORMANCE POR DIA DA SEMANA
+      sb.writeln("--- 8. PERFORMANCE POR DIA DA SEMANA ---");
+      desempenhoPorDia.forEach((dia, data) {
+        final total = data['total'] as int;
+        if (total > 0) {
+          final wins = data['wins'] as int;
+          final lucro = data['lucro'] as double;
+          final winRate = (wins / total) * 100;
+          sb.writeln("$dia: $total apostas | Taxa: ${winRate.toStringAsFixed(1)}% | Resultado: R\$ ${lucro.toStringAsFixed(2)}");
+        }
+      });
+      sb.writeln("");
+
+      // BLOCO 9: HISTÓRICO
+      sb.writeln("--- 9. HISTÓRICO RECENTE DE APOSTAS (Últimas 50) ---");
       sb.writeln("Data | Camp | Time | Tipo | Odd | Stake | Lucro | Margem | EV | Obs");
       final ultimasApostas = apostas.length > 50 ? apostas.sublist(apostas.length - 50) : apostas;
       for(var a in ultimasApostas.reversed) {
@@ -6851,41 +6902,97 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
   }
 
   // MODIFICADO: Agora aceita estatísticas globais
-  String _construirPromptAnaliseGeral(Map<String, dynamic> dashboardData, Map<String, dynamic> diarioData, Map<String, dynamic> flatStats, Map<String, dynamic> globalStats) {
+  String _construirPromptAnaliseGeral(
+      Map<String, dynamic> dashboardData,
+      Map<String, dynamic> diarioData,
+      Map<String, dynamic> flatStats,
+      Map<String, dynamic> globalStats,
+      List<Map<String, dynamic>> apostas,
+      ) {
+    final int totalApostas = apostas.length;
+    final int totalVitorias = apostas.where((a) => (a['lucro'] as num) > 0).length;
+    final int totalDerrotas = apostas.where((a) => (a['lucro'] as num) < 0).length;
+    final double totalLucro = apostas.fold(0.0, (sum, a) => sum + (a['lucro'] as num).toDouble());
+    final double totalStaked = apostas.fold(0.0, (sum, a) => sum + (a['stake'] as num).toDouble());
+    final double yieldPct = totalStaked > 0 ? (totalLucro / totalStaked) * 100 : 0.0;
+    final double grossProfit = apostas.where((a) => (a['lucro'] as num) > 0).fold(0.0, (s, a) => s + (a['lucro'] as num).toDouble());
+    final double grossLoss = apostas.where((a) => (a['lucro'] as num) < 0).fold(0.0, (s, a) => s + ((a['lucro'] as num).abs()).toDouble());
+    final double profitFactor = grossLoss == 0 ? (grossProfit > 0 ? 999.0 : 0.0) : (grossProfit / grossLoss);
+    final double somaOdds = apostas.fold(0.0, (sum, a) => sum + (a['odd'] as num).toDouble());
+    final double oddMedia = apostas.isNotEmpty ? (somaOdds / apostas.length) : 0.0;
+    final double taxaNecessaria = (oddMedia > 0) ? (1 / oddMedia) * 100 : 0.0;
+    final double taxaReal = apostas.isNotEmpty ? (totalVitorias / apostas.length) * 100 : 0.0;
+    final List<double> stakes = apostas.map((a) => (a['stake'] as num).toDouble()).toList()..sort();
+    final double stakeMedia = stakes.isNotEmpty ? (stakes.reduce((a, b) => a + b) / stakes.length) : 0.0;
+    final double stakeMediana = stakes.isNotEmpty
+        ? (stakes.length.isOdd
+        ? stakes[stakes.length ~/ 2]
+        : (stakes[(stakes.length ~/ 2) - 1] + stakes[stakes.length ~/ 2]) / 2)
+        : 0.0;
+    int maxWinStreak = 0;
+    int maxLoseStreak = 0;
+    int currentW = 0;
+    int currentL = 0;
+    final sortedApostas = List<Map<String, dynamic>>.from(apostas)..sort((a, b) => a['data'].compareTo(b['data']));
+    for (var a in sortedApostas) {
+      final l = (a['lucro'] as num).toDouble();
+      if (l > 0) {
+        currentW++;
+        currentL = 0;
+        if (currentW > maxWinStreak) maxWinStreak = currentW;
+      } else if (l < 0) {
+        currentL++;
+        currentW = 0;
+        if (currentL > maxLoseStreak) maxLoseStreak = currentL;
+      }
+    }
+
     return """
     Atue como um analista de desempenho esportivo e comportamental profissional (Coach de Apostas).
-    Faça uma análise profunda cruzando o desempenho financeiro com o contexto pessoal e emocional do apostador.
+    Use o máximo possível das informações fornecidas (dados financeiros, histórico, diário, metas e métricas matemáticas).
+    Gere um relatório completo de desempenho com diagnóstico e sugestões de melhoria estruturais e comportamentais.
+
     Explicações sobre os dados:
-    Nível de confiança: O nível é gerado cruzando dados do meu histórico, analise de IA, Poisson, comentários das apostas anteriores no mesmo time
-    histórico do confronto direto e se existe alguma desconfiança exra ou não ( tudo isso gera uma nota )
-    Margem: Registrado após o jogo é o quanto sobrou de gols a favor ou faltou se meu time venceu por 2x0 ( margem +1)
-    Comentários: Breve descrição de como foi a aposta ( os registros pesados ficam depois em outro lugar )
-    EV+ : Cálculo Poisson, com ajustes pessoais para definir se uma aposta tem ou não valor esperado positivo.
-    
-    Metas: São definidas para um periodo mas o fato de estar em 0% não significa que não está em andamento.
-    
+    - Nível de confiança: nota gerada cruzando histórico, IA, Poisson, comentários e confrontos diretos.
+    - Margem: diferença de gols no resultado final (ex: venceu 2x0 = margem +2).
+    - Comentários: registro breve da aposta.
+    - EV+: valor esperado (Poisson + ajustes pessoais).
+    - Metas: podem estar em 0% e ainda em andamento (não interpretar como fracasso imediato).
 
     === 1. DADOS DE PERFORMANCE (Dashboard Financeiro) ===
     ${jsonEncode(dashboardData)}
-    
-    === DADOS DE PERFORMANCE REAL (Flat Stake - Sem influência do valor da aposta) ===
+
+    === 2. RESUMO ESTATÍSTICO DO HISTÓRICO ===
+    Total Apostas: $totalApostas | Vitórias: $totalVitorias | Derrotas: $totalDerrotas
+    Lucro Total: R\$ ${totalLucro.toStringAsFixed(2)}
+    Yield: ${yieldPct.toStringAsFixed(2)}%
+    Profit Factor: ${profitFactor >= 999 ? 'Infinito' : profitFactor.toStringAsFixed(2)}
+    Odd Média: ${oddMedia.toStringAsFixed(2)} | Taxa Real: ${taxaReal.toStringAsFixed(2)}% | Break-even: ${taxaNecessaria.toStringAsFixed(2)}%
+    Stake Média: R\$ ${stakeMedia.toStringAsFixed(2)} | Mediana: R\$ ${stakeMediana.toStringAsFixed(2)}
+    Maior Win Streak: $maxWinStreak | Maior Lose Streak: $maxLoseStreak
+
+    === 3. DADOS DE PERFORMANCE REAL (Flat Stake - Sem influência do valor da aposta) ===
     Lucro em Unidades: ${flatStats['flatProfit'].toStringAsFixed(2)}u
     ROI (Flat): ${flatStats['flatROI'].toStringAsFixed(2)}%
 
-    === 3. ESTATÍSTICAS GLOBAIS DE DESEMPENHO (Detalhado por Time/Liga/Tipo) ===
+    === 4. ESTATÍSTICAS GLOBAIS DE DESEMPENHO (Detalhado por Time/Liga/Tipo) ===
     Utilize estes dados JSON para encontrar padrões específicos de onde o apostador ganha ou perde mais.
     Dados: ${jsonEncode(globalStats)}
 
-    === 4. CONTEXTO PESSOAL (Diário de Bordo e Metas) ===
+    === 5. CONTEXTO PESSOAL (Diário de Bordo, Metas e Mente Matemática) ===
     ${jsonEncode(diarioData)}
 
+    === 6. HISTÓRICO RECENTE (Últimas 50 apostas) ===
+    ${jsonEncode(apostas.length > 50 ? apostas.sublist(apostas.length - 50) : apostas)}
+
     === DIRETRIZES DA ANÁLISE ===
-    1. **Diagnóstico Financeiro:** Avalie ROI, gestão de banca e consistência baseada nos dados do Dashboard.
-    2. **Desempenho Real (Flat Stake):** Compare o desempenho financeiro com o desempenho real (flat stake). Se o flat stake for positivo e o financeiro negativo, alerte sobre a gestão de stake. Se ambos forem positivos, reforce a consistência.
-    3. **Padrões Específicos:** Busque nas 'Estatísticas Globais' quais campeonatos ou tipos de aposta são "buracos negros" (prejuízo constante) e quais são "minas de ouro". Cite nomes.
-    4. **Correlação Emocional:** Analise os "ultimos_eventos_diario". O estado emocional ou eventos recentes explicam alguma oscilação nos resultados?
-    5. **Status das Metas:** Verifique o "resumo_metas". A pressão por metas atrasadas ou a euforia de metas batidas está influenciando o risco?
-    6. **Conclusão:** Forneça 3 conselhos práticos focados em: Técnica, Mentalidade e Ajuste de Metas.
+    1. **Resumo Executivo:** 5-7 linhas com a leitura geral (resultado, risco, consistência).
+    2. **Diagnóstico Financeiro:** ROI, drawdown, profit factor, yield, consistência de stake e risco de ruína.
+    3. **Diagnóstico Estrutural:** análise de padrões (times, campeonatos, tipos, EV+, playbooks, margens).
+    4. **Diagnóstico Comportamental:** use diário, metas e registros emocionais para explicar desvios.
+    5. **Pontos Críticos:** liste 3-5 gargalos com impacto direto no lucro.
+    6. **Plano de Melhoria:** ações em 3 horizontes (imediato, 30 dias, 90 dias).
+    7. **Checklist Operacional:** regras claras para evitar erros recorrentes.
     """;
   }
 
@@ -6902,7 +7009,7 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
     }
 
     final flatStats = _calcularMetricasFlat(apostas);
-    final prompt = _construirPromptAnaliseGeral(dashboardData, diarioData, flatStats, globalStats);
+    final prompt = _construirPromptAnaliseGeral(dashboardData, diarioData, flatStats, globalStats, apostas);
     await _chamarGeminiAPI(prompt);
   }
 
@@ -6921,7 +7028,7 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       }
 
       final flatStats = _calcularMetricasFlat(apostas);
-      final prompt = _construirPromptAnaliseGeral(dashboardData, diarioData, flatStats, globalStats);
+      final prompt = _construirPromptAnaliseGeral(dashboardData, diarioData, flatStats, globalStats, apostas);
       await Share.share(prompt, subject: "Prompt de Análise Geral + Diário");
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro: $e")));
