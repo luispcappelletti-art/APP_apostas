@@ -6511,12 +6511,36 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         final text = json["candidates"]?[0]?["content"]?["parts"]?[0]?["text"];
         setState(() => _analiseIAResultado = text ?? "Sem resposta.");
       } else {
-        _mostrarErroIA("Erro ${response.statusCode}");
+        _mostrarErroIA(_formatarErroGemini(response));
       }
-    } catch (e) {
-      _mostrarErroIA("Erro: $e");
+    } catch (e, stackTrace) {
+      _mostrarErroIA("Erro: $e\n$stackTrace");
     }
     setState(() { _carregando = false; });
+  }
+
+  String _formatarErroGemini(http.Response response) {
+    final status = response.statusCode;
+    final reason = response.reasonPhrase;
+    final bodyText = utf8.decode(response.bodyBytes);
+    String? apiMessage;
+
+    try {
+      final decoded = jsonDecode(bodyText);
+      apiMessage = decoded["error"]?["message"]?.toString();
+    } catch (_) {}
+
+    final buffer = StringBuffer("Erro $status");
+    if (reason != null && reason.isNotEmpty) {
+      buffer.write(" ($reason)");
+    }
+    if (apiMessage != null && apiMessage.isNotEmpty) {
+      buffer.write("\nDetalhes: $apiMessage");
+    } else if (bodyText.isNotEmpty) {
+      buffer.write("\nResposta: $bodyText");
+    }
+
+    return buffer.toString().trim();
   }
 
   void _mostrarErroIA(String erro) {
@@ -19163,7 +19187,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
 
 
 
