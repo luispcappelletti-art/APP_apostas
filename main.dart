@@ -5186,7 +5186,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
 
   List<Map<String, dynamic>> _regrasAposta = [];
 
-  final String _geminiApiKey = "AIzaSyCI50J_8KoU_JftEykhWq6zUDPEDyDgwwk";
+  final String _geminiApiKey = "API_KEY_EXEMPLO";
 
   // Helpers de formatação globais para a classe
   String _fmtPct(dynamic x) => "${((x as num).toDouble() * 100).toStringAsFixed(1)}%";
@@ -9885,12 +9885,12 @@ class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateM
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _termoBuscaPlaybook.isNotEmpty
                   ? IconButton(
-                      onPressed: () => setState(() {
-                        _playbookSearchCtrl.clear();
-                        _termoBuscaPlaybook = '';
-                      }),
-                      icon: const Icon(Icons.clear),
-                    )
+                onPressed: () => setState(() {
+                  _playbookSearchCtrl.clear();
+                  _termoBuscaPlaybook = '';
+                }),
+                icon: const Icon(Icons.clear),
+              )
                   : null,
             ),
           ),
@@ -9898,61 +9898,61 @@ class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateM
         Expanded(
           child: filtrados.isEmpty
               ? Center(
-                  child: Text(
-                    _playbooks.isEmpty ? 'Nenhum playbook cadastrado.' : 'Nenhum playbook encontrado para a busca.',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                )
+            child: Text(
+              _playbooks.isEmpty ? 'Nenhum playbook cadastrado.' : 'Nenhum playbook encontrado para a busca.',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: filtrados.length,
-                  itemBuilder: (context, i) {
-                    final pb = filtrados[i];
-                    final gatilhos = ((pb['gatilhos'] as List?) ?? const []).map((e) => e.toString()).toList();
-                    final checklist = ((pb['checklist'] as List?) ?? const []).map((e) => e.toString()).toList();
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            itemCount: filtrados.length,
+            itemBuilder: (context, i) {
+              final pb = filtrados[i];
+              final gatilhos = ((pb['gatilhos'] as List?) ?? const []).map((e) => e.toString()).toList();
+              final checklist = ((pb['checklist'] as List?) ?? const []).map((e) => e.toString()).toList();
 
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: Text(pb['nome']?.toString() ?? 'Sem nome', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-                                    IconButton(
-                                      onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb, duplicar: true),
-                                      icon: const Icon(Icons.content_copy),
-                                    ),
-                                    IconButton(onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb), icon: const Icon(Icons.edit_outlined)),
-                                    IconButton(onPressed: () => _removerPlaybook(pb), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
-                                  ],
-                                ),
-                            if ((pb['estrategia']?.toString().isNotEmpty ?? false)) Text('Estratégia: ${pb['estrategia']}'),
-                            if ((pb['mercadoPrincipal']?.toString().isNotEmpty ?? false)) Text('Mercado: ${pb['mercadoPrincipal']}'),
-                            if ((pb['risco']?.toString().isNotEmpty ?? false)) Text('Risco: ${pb['risco']}'),
-                            const SizedBox(height: 8),
-                            const Text('Gatilhos de entrada', style: TextStyle(fontWeight: FontWeight.w600)),
-                            if (gatilhos.isEmpty)
-                              const Text('• Não definido')
-                            else
-                              ...gatilhos.map((g) => Text('• $g')),
-                            const SizedBox(height: 8),
-                            const Text('Checklist operacional', style: TextStyle(fontWeight: FontWeight.w600)),
-                            if (checklist.isEmpty)
-                              const Text('• Não definido')
-                            else
-                              ...checklist.map((c) => Text('• $c')),
-                            if ((pb['observacoes']?.toString().isNotEmpty ?? false)) ...[
-                              const SizedBox(height: 8),
-                              Text('Observações: ${pb['observacoes']}'),
-                            ]
-                          ],
-                        ),
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(pb['nome']?.toString() ?? 'Sem nome', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                          IconButton(
+                            onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb, duplicar: true),
+                            icon: const Icon(Icons.content_copy),
+                          ),
+                          IconButton(onPressed: () => _dialogAdicionarEditarPlaybook(playbookExistente: pb), icon: const Icon(Icons.edit_outlined)),
+                          IconButton(onPressed: () => _removerPlaybook(pb), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                        ],
                       ),
-                    );
-                  },
+                      if ((pb['estrategia']?.toString().isNotEmpty ?? false)) Text('Estratégia: ${pb['estrategia']}'),
+                      if ((pb['mercadoPrincipal']?.toString().isNotEmpty ?? false)) Text('Mercado: ${pb['mercadoPrincipal']}'),
+                      if ((pb['risco']?.toString().isNotEmpty ?? false)) Text('Risco: ${pb['risco']}'),
+                      const SizedBox(height: 8),
+                      const Text('Gatilhos de entrada', style: TextStyle(fontWeight: FontWeight.w600)),
+                      if (gatilhos.isEmpty)
+                        const Text('• Não definido')
+                      else
+                        ...gatilhos.map((g) => Text('• $g')),
+                      const SizedBox(height: 8),
+                      const Text('Checklist operacional', style: TextStyle(fontWeight: FontWeight.w600)),
+                      if (checklist.isEmpty)
+                        const Text('• Não definido')
+                      else
+                        ...checklist.map((c) => Text('• $c')),
+                      if ((pb['observacoes']?.toString().isNotEmpty ?? false)) ...[
+                        const SizedBox(height: 8),
+                        Text('Observações: ${pb['observacoes']}'),
+                      ]
+                    ],
+                  ),
                 ),
+              );
+            },
+          ),
         ),
       ],
     );
@@ -10431,17 +10431,17 @@ class _TelaSobra3State extends State<TelaSobra3> with SingleTickerProviderStateM
                     ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.rule_folder, size: 64, color: Colors.grey.shade300), const SizedBox(height: 16), Text(_blocosDeRegras.isEmpty ? "Crie seu primeiro bloco de regras." : "Nenhum setup encontrado.", style: TextStyle(color: Colors.grey.shade500))]))
                     : _termoBusca.isEmpty
                     ? ReorderableListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _blocosFiltrados.length,
-                        onReorder: _onReorder,
-                        proxyDecorator: (child, index, animation) => Material(elevation: 8, color: Colors.transparent, borderRadius: BorderRadius.circular(16), child: child),
-                        itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
-                      )
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _blocosFiltrados.length,
+                  onReorder: _onReorder,
+                  proxyDecorator: (child, index, animation) => Material(elevation: 8, color: Colors.transparent, borderRadius: BorderRadius.circular(16), child: child),
+                  itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
+                )
                     : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _blocosFiltrados.length,
-                        itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
-                      ),
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _blocosFiltrados.length,
+                  itemBuilder: (context, index) { final bloco = _blocosFiltrados[index]; return _buildBlocoCard(bloco, index); },
+                ),
               ),
             ],
           ),
@@ -11644,9 +11644,9 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 items: [
                   const DropdownMenuItem<int?>(value: null, child: Text('Todos os playbooks')),
                   ...playbooksOrdenados.map((p) => DropdownMenuItem<int?>(
-                        value: (p['id'] as num).toInt(),
-                        child: Text(p['nome'] as String),
-                      )),
+                    value: (p['id'] as num).toInt(),
+                    child: Text(p['nome'] as String),
+                  )),
                 ],
                 onChanged: (v) => setState(() { _filtroPlaybookId = v; _aplicarTodosFiltros(); }),
               ),
@@ -18166,7 +18166,7 @@ class _TelaGastosState extends State<TelaGastos> {
 // INICIO DE TELAS OBSOLETAS //
 
 
-const String geminiApiKey = "AIzaSyCI50J_8KoU_JftEykhWq6zUDPEDyDgwwk";
+const String geminiApiKey = "API_KEY_EXEMPLO";
 
 
 
@@ -19187,7 +19187,6 @@ class _TelaBackupState extends State<TelaBackup> {
 // ===================================================================
 // FIM DO BLOCO DA TELA DE BACKUP
 // ===================================================================
-
 
 
 
