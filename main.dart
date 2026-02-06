@@ -5186,7 +5186,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
 
   List<Map<String, dynamic>> _regrasAposta = [];
 
-  final String _geminiApiKey = "API_KEY_EXEMPLO";
+  String? _geminiApiKey;
 
   // Helpers de formatação globais para a classe
   String _fmtPct(dynamic x) => "${((x as num).toDouble() * 100).toStringAsFixed(1)}%";
@@ -5196,6 +5196,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _carregarGeminiApiKey();
     _carregarDadosParaAutocomplete();
     _carregarRegras();
     _carregarScoutDb();
@@ -5218,6 +5219,15 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     _carregarRascunhoConfianca();
     _carregarCardsPoisson();
     _carregarConfigNivelEnfrentamento();
+  }
+
+  Future<void> _carregarGeminiApiKey() async {
+    try {
+      final key = await rootBundle.loadString('assets/api_key.txt');
+      setState(() => _geminiApiKey = key.trim());
+    } catch (e) {
+      _mostrarErroIA("Não foi possível carregar a API key em assets/api_key.txt.\nErro: $e");
+    }
   }
 
   @override
@@ -6501,8 +6511,14 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     setState(() { _carregando = true; _analiseIAResultado = null; });
 
     const String model = "models/gemini-2.5-flash";
+    final apiKey = _geminiApiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      _mostrarErroIA("API key não carregada. Verifique o arquivo assets/api_key.txt.");
+      setState(() { _carregando = false; });
+      return;
+    }
     try {
-      final url = Uri.parse("https://generativelanguage.googleapis.com/v1/$model:generateContent?key=$_geminiApiKey");
+      final url = Uri.parse("https://generativelanguage.googleapis.com/v1/$model:generateContent?key=$apiKey");
       final body = jsonEncode({"contents": [{"role": "user", "parts": [{"text": prompt}]}]});
       final response = await http.post(url, headers: {"Content-Type": "application/json"}, body: body);
 
@@ -18164,10 +18180,6 @@ class _TelaGastosState extends State<TelaGastos> {
 
 
 // INICIO DE TELAS OBSOLETAS //
-
-
-const String geminiApiKey = "API_KEY_EXEMPLO";
-
 
 
 // ===================================================================
