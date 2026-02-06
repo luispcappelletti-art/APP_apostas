@@ -6628,11 +6628,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     final double avgLucro = total > 0 ? totalLucro / total : 0.0;
     final double winRate = total > 0 ? (wins / total) * 100 : 0.0;
 
-    final double grossProfit = apostas
-        .where((a) => ((a['lucro'] as num?)?.toDouble() ?? 0.0) > 0)
-        .fold(0.0, (s, a) => s + (a['lucro'] as num).toDouble());
-    final double grossLoss = apostas
-        .where((a) => ((a['lucro'] as num?)?.toDouble() ?? 0.0) < 0)
+
         .fold(0.0, (s, a) => s + ((a['lucro'] as num).abs()).toDouble());
     final double profitFactor = grossLoss == 0 ? (grossProfit > 0 ? 999.0 : 0.0) : (grossProfit / grossLoss);
 
