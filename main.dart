@@ -16952,6 +16952,14 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora},
       'formaVitorias': {
         'ativo': usarFormaVitorias,
+        'jogosCasa': nCasa,
+        'jogosFora': nFora,
+        'vitoriasCasa': vitoriasMandante,
+        'empatesCasa': empatesMandante,
+        'derrotasCasa': derrotasMandante,
+        'vitoriasFora': vitoriasVisitante,
+        'empatesFora': empatesVisitante,
+        'derrotasFora': derrotasVisitante,
         'taxaCasa': taxaVitoriaCasa,
         'taxaFora': taxaVitoriaFora,
         'taxaEmpateCasa': taxaEmpateCasa,
@@ -17175,12 +17183,33 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
                   Text("Confiança prevista: ${(maiorProb * 100).toStringAsFixed(1)}% | Prob. do real: ${(pReal * 100).toStringAsFixed(1)}%"),
                   Text("Gols esperados (λ): ${lambdaCasa.toStringAsFixed(2)} x ${lambdaFora.toStringAsFixed(2)}"),
                   if (resultados['formaVitorias'] != null)
-                    Text(
-                      ((((resultados['formaVitorias'] as Map<String, dynamic>)['ativo'] as bool?) ?? true)
-                          ? "Forma (resultados): Casa ${(100 * ((((resultados['formaVitorias'] as Map<String, dynamic>)['taxaPontosCasa'] as num?)?.toDouble() ?? ((resultados['formaVitorias'] as Map<String, dynamic>)['taxaCasa'] as num).toDouble()))).toStringAsFixed(1)}% pts | Fora ${(100 * ((((resultados['formaVitorias'] as Map<String, dynamic>)['taxaPontosFora'] as num?)?.toDouble() ?? ((resultados['formaVitorias'] as Map<String, dynamic>)['taxaFora'] as num).toDouble()))).toStringAsFixed(1)}% pts"
-                          : "Forma (resultados): desativada para este registro"),
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
+                    Builder(builder: (_) {
+                      final forma = resultados['formaVitorias'] as Map<String, dynamic>;
+                      final ativo = (forma['ativo'] as bool?) ?? true;
+                      if (!ativo) {
+                        return const Text(
+                          "Forma (resultados): desativada para este registro",
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        );
+                      }
+
+                      final pontosCasa = ((forma['taxaPontosCasa'] as num?)?.toDouble() ?? (forma['taxaCasa'] as num).toDouble()) * 100;
+                      final pontosFora = ((forma['taxaPontosFora'] as num?)?.toDouble() ?? (forma['taxaFora'] as num).toDouble()) * 100;
+                      final jogosCasa = ((forma['jogosCasa'] as num?)?.toDouble() ?? 0).toInt();
+                      final jogosFora = ((forma['jogosFora'] as num?)?.toDouble() ?? 0).toInt();
+                      final vCasa = ((forma['vitoriasCasa'] as num?)?.toDouble() ?? 0).toInt();
+                      final eCasa = ((forma['empatesCasa'] as num?)?.toDouble() ?? 0).toInt();
+                      final dCasa = ((forma['derrotasCasa'] as num?)?.toDouble() ?? 0).toInt();
+                      final vFora = ((forma['vitoriasFora'] as num?)?.toDouble() ?? 0).toInt();
+                      final eFora = ((forma['empatesFora'] as num?)?.toDouble() ?? 0).toInt();
+                      final dFora = ((forma['derrotasFora'] as num?)?.toDouble() ?? 0).toInt();
+
+                      return Text(
+                        "Forma (resultados): Casa ${pontosCasa.toStringAsFixed(1)}% pts (V:$vCasa E:$eCasa D:$dCasa/$jogosCasa) | "
+                        "Fora ${pontosFora.toStringAsFixed(1)}% pts (V:$vFora E:$eFora D:$dFora/$jogosFora)",
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      );
+                    }),
                   if (resumoCasa.isNotEmpty || resumoFora.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text("Nível de enfrentamento (Casa): $resumoCasa", style: const TextStyle(fontSize: 11, color: Colors.black54)),
