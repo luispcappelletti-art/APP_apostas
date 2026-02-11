@@ -7684,6 +7684,15 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
     final gsFora = _p(form['gsVisitante']!) ?? 0.0;
     final vitoriasMandante = (_p(form['vitoriasMandante'] ?? '') ?? 0.0).clamp(0.0, nCasa);
     final vitoriasVisitante = (_p(form['vitoriasVisitante'] ?? '') ?? 0.0).clamp(0.0, nFora);
+    final empatesMandanteInput = _p(form['empatesMandante'] ?? '');
+    final empatesVisitanteInput = _p(form['empatesVisitante'] ?? '');
+    final derrotasMandanteInput = _p(form['derrotasMandante'] ?? '');
+    final derrotasVisitanteInput = _p(form['derrotasVisitante'] ?? '');
+
+    final empatesMandante = (empatesMandanteInput ?? max(0.0, nCasa - vitoriasMandante)).clamp(0.0, nCasa);
+    final empatesVisitante = (empatesVisitanteInput ?? max(0.0, nFora - vitoriasVisitante)).clamp(0.0, nFora);
+    final derrotasMandante = (derrotasMandanteInput ?? max(0.0, nCasa - vitoriasMandante - empatesMandante)).clamp(0.0, nCasa);
+    final derrotasVisitante = (derrotasVisitanteInput ?? max(0.0, nFora - vitoriasVisitante - empatesVisitante)).clamp(0.0, nFora);
 
     // CÁLCULO DA MÉDIA BLENDADA (EFICÁCIA)
     // Combina a realidade (Gols) com a estatística subjacente (xG) baseado no peso
@@ -7717,9 +7726,17 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
 
     final taxaVitoriaCasa = _poissonUsarFormaVitorias && nCasa > 0 ? (vitoriasMandante / nCasa) : 0.5;
     final taxaVitoriaFora = _poissonUsarFormaVitorias && nFora > 0 ? (vitoriasVisitante / nFora) : 0.5;
+    final taxaEmpateCasa = _poissonUsarFormaVitorias && nCasa > 0 ? (empatesMandante / nCasa) : 0.0;
+    final taxaEmpateFora = _poissonUsarFormaVitorias && nFora > 0 ? (empatesVisitante / nFora) : 0.0;
+    final taxaDerrotaCasa = _poissonUsarFormaVitorias && nCasa > 0 ? (derrotasMandante / nCasa) : 0.5;
+    final taxaDerrotaFora = _poissonUsarFormaVitorias && nFora > 0 ? (derrotasVisitante / nFora) : 0.5;
+    final taxaPontosCasa = _poissonUsarFormaVitorias && nCasa > 0 ? ((vitoriasMandante * 3.0 + empatesMandante) / (nCasa * 3.0)) : 0.5;
+    final taxaPontosFora = _poissonUsarFormaVitorias && nFora > 0 ? ((vitoriasVisitante * 3.0 + empatesVisitante) / (nFora * 3.0)) : 0.5;
     const pesoVitorias = 0.30;
-    final ajusteMandante = 1.0 + ((taxaVitoriaCasa - 0.5) * pesoVitorias);
-    final ajusteVisitante = 1.0 + ((taxaVitoriaFora - 0.5) * pesoVitorias);
+    final indiceFormaCasa = (taxaPontosCasa * 0.7) + ((taxaVitoriaCasa + taxaEmpateCasa - taxaDerrotaCasa) * 0.3);
+    final indiceFormaFora = (taxaPontosFora * 0.7) + ((taxaVitoriaFora + taxaEmpateFora - taxaDerrotaFora) * 0.3);
+    final ajusteMandante = 1.0 + ((indiceFormaCasa - 0.5) * pesoVitorias);
+    final ajusteVisitante = 1.0 + ((indiceFormaFora - 0.5) * pesoVitorias);
     final fatorForma = (ajusteMandante / ajusteVisitante).clamp(0.85, 1.15);
 
     lambdaCasa = (lambdaCasa * fatorForma).clamp(0.05, 6.0);
@@ -7867,6 +7884,12 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
         'ativo': _poissonUsarFormaVitorias,
         'taxaCasa': taxaVitoriaCasa,
         'taxaFora': taxaVitoriaFora,
+        'taxaEmpateCasa': taxaEmpateCasa,
+        'taxaEmpateFora': taxaEmpateFora,
+        'taxaDerrotaCasa': taxaDerrotaCasa,
+        'taxaDerrotaFora': taxaDerrotaFora,
+        'taxaPontosCasa': taxaPontosCasa,
+        'taxaPontosFora': taxaPontosFora,
         'fator': fatorForma,
       }
     };
@@ -8428,8 +8451,8 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
                     if (_resultadoPoisson!['formaVitorias'] != null)
                       Text(
                         ((_resultadoPoisson!['formaVitorias']['ativo'] as bool? ?? true)
-                            ? "Forma (vitórias): Casa ${((_resultadoPoisson!['formaVitorias']['taxaCasa'] as num) * 100).toStringAsFixed(1)}% | Fora ${((_resultadoPoisson!['formaVitorias']['taxaFora'] as num) * 100).toStringAsFixed(1)}% | Fator ${(_resultadoPoisson!['formaVitorias']['fator'] as num).toStringAsFixed(2)}"
-                            : "Forma (vitórias): desativada para este cálculo"),
+                            ? "Forma (resultados): Casa ${(100 * ((_resultadoPoisson!['formaVitorias']['taxaPontosCasa'] as num?)?.toDouble() ?? (_resultadoPoisson!['formaVitorias']['taxaCasa'] as num).toDouble())).toStringAsFixed(1)}% pts | Fora ${(100 * ((_resultadoPoisson!['formaVitorias']['taxaPontosFora'] as num?)?.toDouble() ?? (_resultadoPoisson!['formaVitorias']['taxaFora'] as num).toDouble())).toStringAsFixed(1)}% pts | Fator ${(_resultadoPoisson!['formaVitorias']['fator'] as num).toStringAsFixed(2)}"
+                            : "Forma (resultados): desativada para este cálculo"),
                         style: const TextStyle(fontSize: 12, color: Colors.black87),
                       ),
                     const SizedBox(height: 8),
@@ -16521,6 +16544,8 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     double somaXGMandanteRaw = 0;
     double somaGSMandanteRaw = 0;
     int vitoriasMandante = 0;
+    int empatesMandante = 0;
+    int derrotasMandante = 0;
     for (var p in jogosMandante) {
       final gm = (p['gm_casa'] as num).toDouble();
       final xg = (p['xg_casa'] as num).toDouble();
@@ -16537,7 +16562,13 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       somaGMandante += gm * pesoAtk;
       somaXGMandante += xg * pesoAtk;
       somaGSMandante += gs * pesoDef;
-      if (gm > gs) vitoriasMandante++;
+      if (gm > gs) {
+        vitoriasMandante++;
+      } else if (gm == gs) {
+        empatesMandante++;
+      } else {
+        derrotasMandante++;
+      }
     }
 
     double somaGVisitante = 0;
@@ -16547,6 +16578,8 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     double somaXGVisitanteRaw = 0;
     double somaGSVisitanteRaw = 0;
     int vitoriasVisitante = 0;
+    int empatesVisitante = 0;
+    int derrotasVisitante = 0;
     for (var p in jogosVisitante) {
       final gm = (p['gm_fora'] as num).toDouble();
       final xg = (p['xg_fora'] as num).toDouble();
@@ -16563,7 +16596,13 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       somaGVisitante += gm * pesoAtk;
       somaXGVisitante += xg * pesoAtk;
       somaGSVisitante += gs * pesoDef;
-      if (gm > gs) vitoriasVisitante++;
+      if (gm > gs) {
+        vitoriasVisitante++;
+      } else if (gm == gs) {
+        empatesVisitante++;
+      } else {
+        derrotasVisitante++;
+      }
     }
 
     final jogosLiga = _todasPartidas.where((p) => p['campeonato'] == camp).toList();
@@ -16602,6 +16641,10 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       gsVisitante: somaGSVisitante,
       vitoriasMandante: vitoriasMandante.toDouble(),
       vitoriasVisitante: vitoriasVisitante.toDouble(),
+      empatesMandante: empatesMandante.toDouble(),
+      empatesVisitante: empatesVisitante.toDouble(),
+      derrotasMandante: derrotasMandante.toDouble(),
+      derrotasVisitante: derrotasVisitante.toDouble(),
       usarFormaVitorias: _poissonUsarFormaVitorias,
       fatorCasa: _poissonFatorCasaPadrao,
       fatorLiga: _poissonFatorLigaPadrao,
@@ -16625,10 +16668,14 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
         'xgMandante': somaXGMandante,
         'gsMandante': somaGSMandante,
         'vitoriasMandante': vitoriasMandante,
+        'empatesMandante': empatesMandante,
+        'derrotasMandante': derrotasMandante,
         'gmVisitante': somaGVisitante,
         'xgVisitante': somaXGVisitante,
         'gsVisitante': somaGSVisitante,
         'vitoriasVisitante': vitoriasVisitante,
+        'empatesVisitante': empatesVisitante,
+        'derrotasVisitante': derrotasVisitante,
         'gmMandanteRaw': somaGMandanteRaw,
         'xgMandanteRaw': somaXGMandanteRaw,
         'gsMandanteRaw': somaGSMandanteRaw,
@@ -16718,6 +16765,10 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     required double gsVisitante,
     required double vitoriasMandante,
     required double vitoriasVisitante,
+    required double empatesMandante,
+    required double empatesVisitante,
+    required double derrotasMandante,
+    required double derrotasVisitante,
     required bool usarFormaVitorias,
     required double fatorCasa,
     required double fatorLiga,
@@ -16761,9 +16812,17 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
 
     final taxaVitoriaCasa = usarFormaVitorias && nCasa > 0 ? (vitoriasMandante / nCasa) : 0.5;
     final taxaVitoriaFora = usarFormaVitorias && nFora > 0 ? (vitoriasVisitante / nFora) : 0.5;
+    final taxaEmpateCasa = usarFormaVitorias && nCasa > 0 ? (empatesMandante / nCasa) : 0.0;
+    final taxaEmpateFora = usarFormaVitorias && nFora > 0 ? (empatesVisitante / nFora) : 0.0;
+    final taxaDerrotaCasa = usarFormaVitorias && nCasa > 0 ? (derrotasMandante / nCasa) : 0.5;
+    final taxaDerrotaFora = usarFormaVitorias && nFora > 0 ? (derrotasVisitante / nFora) : 0.5;
+    final taxaPontosCasa = usarFormaVitorias && nCasa > 0 ? ((vitoriasMandante * 3.0 + empatesMandante) / (nCasa * 3.0)) : 0.5;
+    final taxaPontosFora = usarFormaVitorias && nFora > 0 ? ((vitoriasVisitante * 3.0 + empatesVisitante) / (nFora * 3.0)) : 0.5;
     const pesoVitorias = 0.30;
-    final ajusteMandante = 1.0 + ((taxaVitoriaCasa - 0.5) * pesoVitorias);
-    final ajusteVisitante = 1.0 + ((taxaVitoriaFora - 0.5) * pesoVitorias);
+    final indiceFormaCasa = (taxaPontosCasa * 0.7) + ((taxaVitoriaCasa + taxaEmpateCasa - taxaDerrotaCasa) * 0.3);
+    final indiceFormaFora = (taxaPontosFora * 0.7) + ((taxaVitoriaFora + taxaEmpateFora - taxaDerrotaFora) * 0.3);
+    final ajusteMandante = 1.0 + ((indiceFormaCasa - 0.5) * pesoVitorias);
+    final ajusteVisitante = 1.0 + ((indiceFormaFora - 0.5) * pesoVitorias);
     final fatorForma = (ajusteMandante / ajusteVisitante).clamp(0.85, 1.15);
 
     lambdaCasa = (lambdaCasa * fatorForma).clamp(0.05, 6.0);
@@ -16891,7 +16950,18 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       'placares': placares,
       'probGols': probGols,
       'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora},
-      'formaVitorias': {'ativo': usarFormaVitorias, 'taxaCasa': taxaVitoriaCasa, 'taxaFora': taxaVitoriaFora, 'fator': fatorForma},
+      'formaVitorias': {
+        'ativo': usarFormaVitorias,
+        'taxaCasa': taxaVitoriaCasa,
+        'taxaFora': taxaVitoriaFora,
+        'taxaEmpateCasa': taxaEmpateCasa,
+        'taxaEmpateFora': taxaEmpateFora,
+        'taxaDerrotaCasa': taxaDerrotaCasa,
+        'taxaDerrotaFora': taxaDerrotaFora,
+        'taxaPontosCasa': taxaPontosCasa,
+        'taxaPontosFora': taxaPontosFora,
+        'fator': fatorForma,
+      },
     };
   }
 
@@ -16991,8 +17061,8 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       children: [
         SwitchListTile(
           value: _poissonUsarFormaVitorias,
-          title: const Text("Incluir taxa de vitórias no Poisson Scout"),
-          subtitle: const Text("Desative para comparar os registros novos sem o ajuste de forma."),
+          title: const Text("Incluir forma (vitórias, empates e derrotas) no Poisson Scout"),
+          subtitle: const Text("Desative para comparar os registros novos sem o ajuste por resultados recentes."),
           onChanged: (v) {
             setState(() => _poissonUsarFormaVitorias = v);
             _salvarConfigNivelEnfrentamento();
@@ -17107,8 +17177,8 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
                   if (resultados['formaVitorias'] != null)
                     Text(
                       ((((resultados['formaVitorias'] as Map<String, dynamic>)['ativo'] as bool?) ?? true)
-                          ? "Forma (vitórias): Casa ${(((resultados['formaVitorias'] as Map<String, dynamic>)['taxaCasa'] as num) * 100).toStringAsFixed(1)}% | Fora ${(((resultados['formaVitorias'] as Map<String, dynamic>)['taxaFora'] as num) * 100).toStringAsFixed(1)}%"
-                          : "Forma (vitórias): desativada para este registro"),
+                          ? "Forma (resultados): Casa ${(100 * ((((resultados['formaVitorias'] as Map<String, dynamic>)['taxaPontosCasa'] as num?)?.toDouble() ?? ((resultados['formaVitorias'] as Map<String, dynamic>)['taxaCasa'] as num).toDouble()))).toStringAsFixed(1)}% pts | Fora ${(100 * ((((resultados['formaVitorias'] as Map<String, dynamic>)['taxaPontosFora'] as num?)?.toDouble() ?? ((resultados['formaVitorias'] as Map<String, dynamic>)['taxaFora'] as num).toDouble()))).toStringAsFixed(1)}% pts"
+                          : "Forma (resultados): desativada para este registro"),
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   if (resumoCasa.isNotEmpty || resumoFora.isNotEmpty) ...[
