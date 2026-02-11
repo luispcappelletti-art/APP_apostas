@@ -5168,10 +5168,12 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   final TextEditingController _poissonGMMandanteCtrl = TextEditingController(); // Gols Marcados Casa
   final TextEditingController _poissonXGMandanteCtrl = TextEditingController(); // xG Casa
   final TextEditingController _poissonGSMandanteCtrl = TextEditingController(); // Gols Sofridos Casa
+  final TextEditingController _poissonVitoriasMandanteCtrl = TextEditingController(); // Vitórias Casa
 
   final TextEditingController _poissonGMVisitanteCtrl = TextEditingController(); // Gols Marcados Fora
   final TextEditingController _poissonXGVisitanteCtrl = TextEditingController(); // xG Fora
   final TextEditingController _poissonGSVisitanteCtrl = TextEditingController(); // Gols Sofridos Fora
+  final TextEditingController _poissonVitoriasVisitanteCtrl = TextEditingController(); // Vitórias Fora
 
   final TextEditingController _poissonOddCasaCtrl = TextEditingController();
   final TextEditingController _poissonOddEmpateCtrl = TextEditingController();
@@ -5186,6 +5188,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   double _poissonPesoEficacia = 0.50;
   Map<String, dynamic>? _resultadoPoisson;
   bool _nivelEnfrentamentoAtivo = false;
+  bool _poissonUsarFormaVitorias = true;
   final Map<int, double> _nivelEnfrentamentoPesosAtaque = {};
   final Map<int, double> _nivelEnfrentamentoPesosDefesa = {};
   final Map<int, TextEditingController> _nivelEnfrentamentoCtrlsAtaque = {};
@@ -5301,10 +5304,12 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     _poissonGMMandanteCtrl.dispose();
     _poissonXGMandanteCtrl.dispose();
     _poissonGSMandanteCtrl.dispose();
+    _poissonVitoriasMandanteCtrl.dispose();
 
     _poissonGMVisitanteCtrl.dispose();
     _poissonXGVisitanteCtrl.dispose();
     _poissonGSVisitanteCtrl.dispose();
+    _poissonVitoriasVisitanteCtrl.dispose();
 
     _poissonOddCasaCtrl.dispose();
     _poissonOddEmpateCtrl.dispose();
@@ -5386,6 +5391,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
           final pesosDefesa = json['pesosDefesa'];
           setState(() {
             _nivelEnfrentamentoAtivo = json['ativo'] == true;
+            _poissonUsarFormaVitorias = json['usarFormaVitorias'] != false;
             _nivelEnfrentamentoPesosAtaque.clear();
             _nivelEnfrentamentoPesosDefesa.clear();
             if (pesosAtaque is Map) {
@@ -5433,6 +5439,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       final file = await _getPoissonNivelEnfrentamentoFile();
       final json = {
         'ativo': _nivelEnfrentamentoAtivo,
+        'usarFormaVitorias': _poissonUsarFormaVitorias,
         'pesosAtaque': _nivelEnfrentamentoPesosAtaque.map((key, value) => MapEntry(key.toString(), value)),
         'pesosDefesa': _nivelEnfrentamentoPesosDefesa.map((key, value) => MapEntry(key.toString(), value)),
       };
@@ -5723,6 +5730,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     if (jogosMandante.isNotEmpty) {
       double sGM = 0, sXG = 0, sGS = 0;
       double sGMRaw = 0, sXGRaw = 0, sGSRaw = 0;
+      int vitoriasMandante = 0;
       for (var p in jogosMandante) {
         double gm = (p['gm_casa'] as num).toDouble();
         double gs = (p['gm_fora'] as num).toDouble();
@@ -5743,6 +5751,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         double totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
+        if (gm > gs) vitoriasMandante++;
       }
       final gmConsiderado = _nivelEnfrentamentoAtivo ? sGM : sGMRaw;
       final xgConsiderado = _nivelEnfrentamentoAtivo ? sXG : sXGRaw;
@@ -5750,6 +5759,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonGMMandanteCtrl.text = _nivelEnfrentamentoAtivo ? gmConsiderado.toStringAsFixed(2) : gmConsiderado.toInt().toString();
       _poissonXGMandanteCtrl.text = xgConsiderado.toStringAsFixed(2);
       _poissonGSMandanteCtrl.text = _nivelEnfrentamentoAtivo ? gsConsiderado.toStringAsFixed(2) : gsConsiderado.toInt().toString();
+      _poissonVitoriasMandanteCtrl.text = vitoriasMandante.toString();
       _nivelEnfrentamentoResumo['mandante'] = {
         'gmRaw': sGMRaw,
         'gmAdj': sGM,
@@ -5759,6 +5769,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         'gsAdj': sGS,
       };
     } else {
+      _poissonVitoriasMandanteCtrl.clear();
       _nivelEnfrentamentoResumo['mandante'] = {
         'gmRaw': 0.0,
         'gmAdj': 0.0,
@@ -5776,6 +5787,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     if (jogosVisitante.isNotEmpty) {
       double sGM = 0, sXG = 0, sGS = 0;
       double sGMRaw = 0, sXGRaw = 0, sGSRaw = 0;
+      int vitoriasVisitante = 0;
       for (var p in jogosVisitante) {
         double gm = (p['gm_fora'] as num).toDouble();
         double gs = (p['gm_casa'] as num).toDouble();
@@ -5796,6 +5808,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         double totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
+        if (gm > gs) vitoriasVisitante++;
       }
       final gmConsiderado = _nivelEnfrentamentoAtivo ? sGM : sGMRaw;
       final xgConsiderado = _nivelEnfrentamentoAtivo ? sXG : sXGRaw;
@@ -5803,6 +5816,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonGMVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? gmConsiderado.toStringAsFixed(2) : gmConsiderado.toInt().toString();
       _poissonXGVisitanteCtrl.text = xgConsiderado.toStringAsFixed(2);
       _poissonGSVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? gsConsiderado.toStringAsFixed(2) : gsConsiderado.toInt().toString();
+      _poissonVitoriasVisitanteCtrl.text = vitoriasVisitante.toString();
       _nivelEnfrentamentoResumo['visitante'] = {
         'gmRaw': sGMRaw,
         'gmAdj': sGM,
@@ -5812,6 +5826,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         'gsAdj': sGS,
       };
     } else {
+      _poissonVitoriasVisitanteCtrl.clear();
       _nivelEnfrentamentoResumo['visitante'] = {
         'gmRaw': 0.0,
         'gmAdj': 0.0,
@@ -5952,9 +5967,11 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         'gmMandante': _poissonGMMandanteCtrl.text,
         'xgMandante': _poissonXGMandanteCtrl.text,
         'gsMandante': _poissonGSMandanteCtrl.text,
+        'vitoriasMandante': _poissonVitoriasMandanteCtrl.text,
         'gmVisitante': _poissonGMVisitanteCtrl.text,
         'xgVisitante': _poissonXGVisitanteCtrl.text,
         'gsVisitante': _poissonGSVisitanteCtrl.text,
+        'vitoriasVisitante': _poissonVitoriasVisitanteCtrl.text,
         'oddCasa': _poissonOddCasaCtrl.text,
         'oddEmpate': _poissonOddEmpateCtrl.text,
         'oddFora': _poissonOddForaCtrl.text,
@@ -5966,6 +5983,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         'ajusteZero': _poissonAjusteZero,
         'ajusteElasticidade': _poissonAjusteElasticidade,
         'pesoEficacia': _poissonPesoEficacia,
+        'usarFormaVitorias': _poissonUsarFormaVitorias,
       },
       'resultados': _resultadoPoisson,
       'linkedBetId': null,
@@ -6017,10 +6035,12 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonGMMandanteCtrl.text = inputs['gmMandante'] ?? '';
       _poissonXGMandanteCtrl.text = inputs['xgMandante'] ?? '';
       _poissonGSMandanteCtrl.text = inputs['gsMandante'] ?? '';
+      _poissonVitoriasMandanteCtrl.text = inputs['vitoriasMandante'] ?? '';
 
       _poissonGMVisitanteCtrl.text = inputs['gmVisitante'] ?? '';
       _poissonXGVisitanteCtrl.text = inputs['xgVisitante'] ?? '';
       _poissonGSVisitanteCtrl.text = inputs['gsVisitante'] ?? '';
+      _poissonVitoriasVisitanteCtrl.text = inputs['vitoriasVisitante'] ?? '';
 
       _poissonOddCasaCtrl.text = inputs['oddCasa'] ?? '';
       _poissonOddEmpateCtrl.text = inputs['oddEmpate'] ?? '';
@@ -6032,6 +6052,7 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonAjusteZero = (ajustes['ajusteZero'] as num?)?.toDouble() ?? 0.0;
       _poissonAjusteElasticidade = (ajustes['ajusteElasticidade'] as num?)?.toDouble() ?? 0.0;
       _poissonPesoEficacia = (ajustes['pesoEficacia'] as num?)?.toDouble() ?? 0.50;
+      _poissonUsarFormaVitorias = (ajustes['usarFormaVitorias'] as bool?) ?? true;
     });
 
     _onCalcularPoisson();
@@ -6058,6 +6079,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonGMVisitanteCtrl.clear();
       _poissonXGVisitanteCtrl.clear();
       _poissonGSVisitanteCtrl.clear();
+      _poissonVitoriasMandanteCtrl.clear();
+      _poissonVitoriasVisitanteCtrl.clear();
 
       // Zera odds
       _poissonOddCasaCtrl.clear();
@@ -7659,6 +7682,8 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
 
     final gsCasa = _p(form['gsMandante']!) ?? 0.0;
     final gsFora = _p(form['gsVisitante']!) ?? 0.0;
+    final vitoriasMandante = (_p(form['vitoriasMandante'] ?? '') ?? 0.0).clamp(0.0, nCasa);
+    final vitoriasVisitante = (_p(form['vitoriasVisitante'] ?? '') ?? 0.0).clamp(0.0, nFora);
 
     // CÁLCULO DA MÉDIA BLENDADA (EFICÁCIA)
     // Combina a realidade (Gols) com a estatística subjacente (xG) baseado no peso
@@ -7689,6 +7714,16 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
 
     double lambdaCasa = (ligaPorTime * atkCasa * defFora * (1 + _poissonFatorCasa)).clamp(0.05, 6.0);
     double lambdaFora = (ligaPorTime * atkFora * defCasa).clamp(0.05, 6.0);
+
+    final taxaVitoriaCasa = _poissonUsarFormaVitorias && nCasa > 0 ? (vitoriasMandante / nCasa) : 0.5;
+    final taxaVitoriaFora = _poissonUsarFormaVitorias && nFora > 0 ? (vitoriasVisitante / nFora) : 0.5;
+    const pesoVitorias = 0.30;
+    final ajusteMandante = 1.0 + ((taxaVitoriaCasa - 0.5) * pesoVitorias);
+    final ajusteVisitante = 1.0 + ((taxaVitoriaFora - 0.5) * pesoVitorias);
+    final fatorForma = (ajusteMandante / ajusteVisitante).clamp(0.85, 1.15);
+
+    lambdaCasa = (lambdaCasa * fatorForma).clamp(0.05, 6.0);
+    lambdaFora = (lambdaFora / fatorForma).clamp(0.05, 6.0);
 
     const maxGols = 7;
     double pH = 0, pD = 0, pA = 0;
@@ -7827,7 +7862,13 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       'placarProvavel': {'hg': bestHG, 'ag': bestAG, 'p': bestP},
       'placares': placares,
       'probGols': probGols,
-      'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora}
+      'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora},
+      'formaVitorias': {
+        'ativo': _poissonUsarFormaVitorias,
+        'taxaCasa': taxaVitoriaCasa,
+        'taxaFora': taxaVitoriaFora,
+        'fator': fatorForma,
+      }
     };
   }
 
@@ -7849,9 +7890,11 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       'gmMandante': _poissonGMMandanteCtrl.text.trim(),
       'xgMandante': _poissonXGMandanteCtrl.text.trim(), // NOVO
       'gsMandante': _poissonGSMandanteCtrl.text.trim(),
+      'vitoriasMandante': _poissonVitoriasMandanteCtrl.text.trim(),
       'gmVisitante': _poissonGMVisitanteCtrl.text.trim(),
       'xgVisitante': _poissonXGVisitanteCtrl.text.trim(), // NOVO
       'gsVisitante': _poissonGSVisitanteCtrl.text.trim(),
+      'vitoriasVisitante': _poissonVitoriasVisitanteCtrl.text.trim(),
       'oddCasa': _poissonOddCasaCtrl.text.trim(),
       'oddEmpate': _poissonOddEmpateCtrl.text.trim(),
       'oddFora': _poissonOddForaCtrl.text.trim(),
@@ -8036,6 +8079,16 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _poissonVitoriasMandanteCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: "Vitórias do Mandante no recorte (Casa)",
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
 
           const SizedBox(height: 12),
           const Text("⚽ Gols no Recorte"),
@@ -8102,6 +8155,16 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _poissonVitoriasVisitanteCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: "Vitórias do Visitante no recorte (Fora)",
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
 
           const Divider(height: 30),
           const Text("🛡️ Nível de Enfrentamento"),
@@ -8114,6 +8177,15 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
               setState(() => _nivelEnfrentamentoAtivo = v);
               _salvarConfigNivelEnfrentamento();
               _tentaPreencherDadosComScout();
+            },
+          ),
+          SwitchListTile(
+            value: _poissonUsarFormaVitorias,
+            title: const Text("Incluir taxa de vitórias no cálculo"),
+            subtitle: const Text("Permite comparar o Poisson com e sem ajuste de forma por vitórias."),
+            onChanged: (v) {
+              setState(() => _poissonUsarFormaVitorias = v);
+              _salvarConfigNivelEnfrentamento();
             },
           ),
           Builder(
@@ -8353,6 +8425,13 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
 
                     // Display xG vs Gols Info
                     _buildEficaciaInfo(_resultadoPoisson!['eficacia']),
+                    if (_resultadoPoisson!['formaVitorias'] != null)
+                      Text(
+                        ((_resultadoPoisson!['formaVitorias']['ativo'] as bool? ?? true)
+                            ? "Forma (vitórias): Casa ${((_resultadoPoisson!['formaVitorias']['taxaCasa'] as num) * 100).toStringAsFixed(1)}% | Fora ${((_resultadoPoisson!['formaVitorias']['taxaFora'] as num) * 100).toStringAsFixed(1)}% | Fator ${(_resultadoPoisson!['formaVitorias']['fator'] as num).toStringAsFixed(2)}"
+                            : "Forma (vitórias): desativada para este cálculo"),
+                        style: const TextStyle(fontSize: 12, color: Colors.black87),
+                      ),
                     const SizedBox(height: 8),
 
                     Text("Força Atk (Mix) — Casa: ${_fmt2(_resultadoPoisson!['lambdaCasa'])} | Fora: ${_fmt2(_resultadoPoisson!['lambdaFora'])}"),
@@ -15770,6 +15849,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
   static const double _poissonSuavizacaoPadrao = 0.75;
   static const double _poissonPesoEficaciaPadrao = 0.50;
   bool _nivelEnfrentamentoAtivo = false;
+  bool _poissonUsarFormaVitorias = true;
   final Map<int, double> _nivelEnfrentamentoPesosAtaque = {};
   final Map<int, double> _nivelEnfrentamentoPesosDefesa = {};
 
@@ -15890,6 +15970,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
           final pesosDefesa = json['pesosDefesa'];
           setState(() {
             _nivelEnfrentamentoAtivo = json['ativo'] == true;
+            _poissonUsarFormaVitorias = json['usarFormaVitorias'] != false;
             _nivelEnfrentamentoPesosAtaque.clear();
             _nivelEnfrentamentoPesosDefesa.clear();
             if (pesosAtaque is Map) {
@@ -15919,6 +16000,21 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       }
     } catch (e) {
       debugPrint("Erro ao carregar nível de enfrentamento: $e");
+    }
+  }
+
+  Future<void> _salvarConfigNivelEnfrentamento() async {
+    try {
+      final file = await _getPoissonNivelEnfrentamentoFile();
+      final json = {
+        'ativo': _nivelEnfrentamentoAtivo,
+        'usarFormaVitorias': _poissonUsarFormaVitorias,
+        'pesosAtaque': _nivelEnfrentamentoPesosAtaque.map((key, value) => MapEntry(key.toString(), value)),
+        'pesosDefesa': _nivelEnfrentamentoPesosDefesa.map((key, value) => MapEntry(key.toString(), value)),
+      };
+      await file.writeAsString(jsonEncode(json));
+    } catch (e) {
+      debugPrint("Erro ao salvar nível de enfrentamento: $e");
     }
   }
 
@@ -16424,6 +16520,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     double somaGMandanteRaw = 0;
     double somaXGMandanteRaw = 0;
     double somaGSMandanteRaw = 0;
+    int vitoriasMandante = 0;
     for (var p in jogosMandante) {
       final gm = (p['gm_casa'] as num).toDouble();
       final xg = (p['xg_casa'] as num).toDouble();
@@ -16440,6 +16537,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       somaGMandante += gm * pesoAtk;
       somaXGMandante += xg * pesoAtk;
       somaGSMandante += gs * pesoDef;
+      if (gm > gs) vitoriasMandante++;
     }
 
     double somaGVisitante = 0;
@@ -16448,6 +16546,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     double somaGVisitanteRaw = 0;
     double somaXGVisitanteRaw = 0;
     double somaGSVisitanteRaw = 0;
+    int vitoriasVisitante = 0;
     for (var p in jogosVisitante) {
       final gm = (p['gm_fora'] as num).toDouble();
       final xg = (p['xg_fora'] as num).toDouble();
@@ -16464,6 +16563,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       somaGVisitante += gm * pesoAtk;
       somaXGVisitante += xg * pesoAtk;
       somaGSVisitante += gs * pesoDef;
+      if (gm > gs) vitoriasVisitante++;
     }
 
     final jogosLiga = _todasPartidas.where((p) => p['campeonato'] == camp).toList();
@@ -16500,6 +16600,9 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       gmVisitante: somaGVisitante,
       xgVisitante: somaXGVisitante,
       gsVisitante: somaGSVisitante,
+      vitoriasMandante: vitoriasMandante.toDouble(),
+      vitoriasVisitante: vitoriasVisitante.toDouble(),
+      usarFormaVitorias: _poissonUsarFormaVitorias,
       fatorCasa: _poissonFatorCasaPadrao,
       fatorLiga: _poissonFatorLigaPadrao,
       suavizacao: _poissonSuavizacaoPadrao,
@@ -16521,9 +16624,11 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
         'gmMandante': somaGMandante,
         'xgMandante': somaXGMandante,
         'gsMandante': somaGSMandante,
+        'vitoriasMandante': vitoriasMandante,
         'gmVisitante': somaGVisitante,
         'xgVisitante': somaXGVisitante,
         'gsVisitante': somaGSVisitante,
+        'vitoriasVisitante': vitoriasVisitante,
         'gmMandanteRaw': somaGMandanteRaw,
         'xgMandanteRaw': somaXGMandanteRaw,
         'gsMandanteRaw': somaGSMandanteRaw,
@@ -16538,6 +16643,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
         'ajusteZero': ajusteZero,
         'ajusteElasticidade': ajusteElasticidade,
         'pesoEficacia': _poissonPesoEficaciaPadrao,
+        'usarFormaVitorias': _poissonUsarFormaVitorias,
       },
       'resultados': resultado,
       'resultadoReal': {
@@ -16610,6 +16716,9 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     required double gmVisitante,
     required double xgVisitante,
     required double gsVisitante,
+    required double vitoriasMandante,
+    required double vitoriasVisitante,
+    required bool usarFormaVitorias,
     required double fatorCasa,
     required double fatorLiga,
     required double suavizacao,
@@ -16649,6 +16758,16 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
 
     double lambdaCasa = (ligaPorTime * atkCasa * defFora * (1 + fatorCasa)).clamp(0.05, 6.0);
     double lambdaFora = (ligaPorTime * atkFora * defCasa).clamp(0.05, 6.0);
+
+    final taxaVitoriaCasa = usarFormaVitorias && nCasa > 0 ? (vitoriasMandante / nCasa) : 0.5;
+    final taxaVitoriaFora = usarFormaVitorias && nFora > 0 ? (vitoriasVisitante / nFora) : 0.5;
+    const pesoVitorias = 0.30;
+    final ajusteMandante = 1.0 + ((taxaVitoriaCasa - 0.5) * pesoVitorias);
+    final ajusteVisitante = 1.0 + ((taxaVitoriaFora - 0.5) * pesoVitorias);
+    final fatorForma = (ajusteMandante / ajusteVisitante).clamp(0.85, 1.15);
+
+    lambdaCasa = (lambdaCasa * fatorForma).clamp(0.05, 6.0);
+    lambdaFora = (lambdaFora / fatorForma).clamp(0.05, 6.0);
 
     const maxGols = 7;
     double pH = 0, pD = 0, pA = 0;
@@ -16772,6 +16891,7 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
       'placares': placares,
       'probGols': probGols,
       'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora},
+      'formaVitorias': {'ativo': usarFormaVitorias, 'taxaCasa': taxaVitoriaCasa, 'taxaFora': taxaVitoriaFora, 'fator': fatorForma},
     };
   }
 
@@ -16869,6 +16989,15 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        SwitchListTile(
+          value: _poissonUsarFormaVitorias,
+          title: const Text("Incluir taxa de vitórias no Poisson Scout"),
+          subtitle: const Text("Desative para comparar os registros novos sem o ajuste de forma."),
+          onChanged: (v) {
+            setState(() => _poissonUsarFormaVitorias = v);
+            _salvarConfigNivelEnfrentamento();
+          },
+        ),
         Card(
           color: Colors.indigo.shade50,
           child: Padding(
@@ -16975,6 +17104,13 @@ class _TelaAcademiaState extends State<TelaAcademia> with SingleTickerProviderSt
                   Text("Probabilidades: Casa ${(pCasa * 100).toStringAsFixed(1)}% | Empate ${(pEmpate * 100).toStringAsFixed(1)}% | Fora ${(pFora * 100).toStringAsFixed(1)}%"),
                   Text("Confiança prevista: ${(maiorProb * 100).toStringAsFixed(1)}% | Prob. do real: ${(pReal * 100).toStringAsFixed(1)}%"),
                   Text("Gols esperados (λ): ${lambdaCasa.toStringAsFixed(2)} x ${lambdaFora.toStringAsFixed(2)}"),
+                  if (resultados['formaVitorias'] != null)
+                    Text(
+                      ((((resultados['formaVitorias'] as Map<String, dynamic>)['ativo'] as bool?) ?? true)
+                          ? "Forma (vitórias): Casa ${(((resultados['formaVitorias'] as Map<String, dynamic>)['taxaCasa'] as num) * 100).toStringAsFixed(1)}% | Fora ${(((resultados['formaVitorias'] as Map<String, dynamic>)['taxaFora'] as num) * 100).toStringAsFixed(1)}%"
+                          : "Forma (vitórias): desativada para este registro"),
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
                   if (resumoCasa.isNotEmpty || resumoFora.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text("Nível de enfrentamento (Casa): $resumoCasa", style: const TextStyle(fontSize: 11, color: Colors.black54)),
