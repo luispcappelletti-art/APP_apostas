@@ -5169,11 +5169,15 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
   final TextEditingController _poissonXGMandanteCtrl = TextEditingController(); // xG Casa
   final TextEditingController _poissonGSMandanteCtrl = TextEditingController(); // Gols Sofridos Casa
   final TextEditingController _poissonVitoriasMandanteCtrl = TextEditingController(); // Vitórias Casa
+  final TextEditingController _poissonEmpatesMandanteCtrl = TextEditingController(); // Empates Casa
+  final TextEditingController _poissonDerrotasMandanteCtrl = TextEditingController(); // Derrotas Casa
 
   final TextEditingController _poissonGMVisitanteCtrl = TextEditingController(); // Gols Marcados Fora
   final TextEditingController _poissonXGVisitanteCtrl = TextEditingController(); // xG Fora
   final TextEditingController _poissonGSVisitanteCtrl = TextEditingController(); // Gols Sofridos Fora
   final TextEditingController _poissonVitoriasVisitanteCtrl = TextEditingController(); // Vitórias Fora
+  final TextEditingController _poissonEmpatesVisitanteCtrl = TextEditingController(); // Empates Fora
+  final TextEditingController _poissonDerrotasVisitanteCtrl = TextEditingController(); // Derrotas Fora
 
   final TextEditingController _poissonOddCasaCtrl = TextEditingController();
   final TextEditingController _poissonOddEmpateCtrl = TextEditingController();
@@ -5305,11 +5309,15 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
     _poissonXGMandanteCtrl.dispose();
     _poissonGSMandanteCtrl.dispose();
     _poissonVitoriasMandanteCtrl.dispose();
+    _poissonEmpatesMandanteCtrl.dispose();
+    _poissonDerrotasMandanteCtrl.dispose();
 
     _poissonGMVisitanteCtrl.dispose();
     _poissonXGVisitanteCtrl.dispose();
     _poissonGSVisitanteCtrl.dispose();
     _poissonVitoriasVisitanteCtrl.dispose();
+    _poissonEmpatesVisitanteCtrl.dispose();
+    _poissonDerrotasVisitanteCtrl.dispose();
 
     _poissonOddCasaCtrl.dispose();
     _poissonOddEmpateCtrl.dispose();
@@ -5731,6 +5739,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       double sGM = 0, sXG = 0, sGS = 0;
       double sGMRaw = 0, sXGRaw = 0, sGSRaw = 0;
       int vitoriasMandante = 0;
+      int empatesMandante = 0;
+      int derrotasMandante = 0;
       for (var p in jogosMandante) {
         double gm = (p['gm_casa'] as num).toDouble();
         double gs = (p['gm_fora'] as num).toDouble();
@@ -5751,7 +5761,13 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         double totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
-        if (gm > gs) vitoriasMandante++;
+        if (gm > gs) {
+          vitoriasMandante++;
+        } else if (gm == gs) {
+          empatesMandante++;
+        } else {
+          derrotasMandante++;
+        }
       }
       final gmConsiderado = _nivelEnfrentamentoAtivo ? sGM : sGMRaw;
       final xgConsiderado = _nivelEnfrentamentoAtivo ? sXG : sXGRaw;
@@ -5760,6 +5776,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonXGMandanteCtrl.text = xgConsiderado.toStringAsFixed(2);
       _poissonGSMandanteCtrl.text = _nivelEnfrentamentoAtivo ? gsConsiderado.toStringAsFixed(2) : gsConsiderado.toInt().toString();
       _poissonVitoriasMandanteCtrl.text = vitoriasMandante.toString();
+      _poissonEmpatesMandanteCtrl.text = empatesMandante.toString();
+      _poissonDerrotasMandanteCtrl.text = derrotasMandante.toString();
       _nivelEnfrentamentoResumo['mandante'] = {
         'gmRaw': sGMRaw,
         'gmAdj': sGM,
@@ -5770,6 +5788,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       };
     } else {
       _poissonVitoriasMandanteCtrl.clear();
+      _poissonEmpatesMandanteCtrl.clear();
+      _poissonDerrotasMandanteCtrl.clear();
       _nivelEnfrentamentoResumo['mandante'] = {
         'gmRaw': 0.0,
         'gmAdj': 0.0,
@@ -5788,6 +5808,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       double sGM = 0, sXG = 0, sGS = 0;
       double sGMRaw = 0, sXGRaw = 0, sGSRaw = 0;
       int vitoriasVisitante = 0;
+      int empatesVisitante = 0;
+      int derrotasVisitante = 0;
       for (var p in jogosVisitante) {
         double gm = (p['gm_fora'] as num).toDouble();
         double gs = (p['gm_casa'] as num).toDouble();
@@ -5808,7 +5830,13 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         double totalGolsJogo = gm + gs;
         if (totalGolsJogo == 0) contagemZero++;
         if (totalGolsJogo >= 6) contagemCaos++;
-        if (gm > gs) vitoriasVisitante++;
+        if (gm > gs) {
+          vitoriasVisitante++;
+        } else if (gm == gs) {
+          empatesVisitante++;
+        } else {
+          derrotasVisitante++;
+        }
       }
       final gmConsiderado = _nivelEnfrentamentoAtivo ? sGM : sGMRaw;
       final xgConsiderado = _nivelEnfrentamentoAtivo ? sXG : sXGRaw;
@@ -5817,6 +5845,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonXGVisitanteCtrl.text = xgConsiderado.toStringAsFixed(2);
       _poissonGSVisitanteCtrl.text = _nivelEnfrentamentoAtivo ? gsConsiderado.toStringAsFixed(2) : gsConsiderado.toInt().toString();
       _poissonVitoriasVisitanteCtrl.text = vitoriasVisitante.toString();
+      _poissonEmpatesVisitanteCtrl.text = empatesVisitante.toString();
+      _poissonDerrotasVisitanteCtrl.text = derrotasVisitante.toString();
       _nivelEnfrentamentoResumo['visitante'] = {
         'gmRaw': sGMRaw,
         'gmAdj': sGM,
@@ -5827,6 +5857,8 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       };
     } else {
       _poissonVitoriasVisitanteCtrl.clear();
+      _poissonEmpatesVisitanteCtrl.clear();
+      _poissonDerrotasVisitanteCtrl.clear();
       _nivelEnfrentamentoResumo['visitante'] = {
         'gmRaw': 0.0,
         'gmAdj': 0.0,
@@ -5968,10 +6000,14 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
         'xgMandante': _poissonXGMandanteCtrl.text,
         'gsMandante': _poissonGSMandanteCtrl.text,
         'vitoriasMandante': _poissonVitoriasMandanteCtrl.text,
+        'empatesMandante': _poissonEmpatesMandanteCtrl.text,
+        'derrotasMandante': _poissonDerrotasMandanteCtrl.text,
         'gmVisitante': _poissonGMVisitanteCtrl.text,
         'xgVisitante': _poissonXGVisitanteCtrl.text,
         'gsVisitante': _poissonGSVisitanteCtrl.text,
         'vitoriasVisitante': _poissonVitoriasVisitanteCtrl.text,
+        'empatesVisitante': _poissonEmpatesVisitanteCtrl.text,
+        'derrotasVisitante': _poissonDerrotasVisitanteCtrl.text,
         'oddCasa': _poissonOddCasaCtrl.text,
         'oddEmpate': _poissonOddEmpateCtrl.text,
         'oddFora': _poissonOddForaCtrl.text,
@@ -6036,11 +6072,15 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonXGMandanteCtrl.text = inputs['xgMandante'] ?? '';
       _poissonGSMandanteCtrl.text = inputs['gsMandante'] ?? '';
       _poissonVitoriasMandanteCtrl.text = inputs['vitoriasMandante'] ?? '';
+      _poissonEmpatesMandanteCtrl.text = inputs['empatesMandante'] ?? '';
+      _poissonDerrotasMandanteCtrl.text = inputs['derrotasMandante'] ?? '';
 
       _poissonGMVisitanteCtrl.text = inputs['gmVisitante'] ?? '';
       _poissonXGVisitanteCtrl.text = inputs['xgVisitante'] ?? '';
       _poissonGSVisitanteCtrl.text = inputs['gsVisitante'] ?? '';
       _poissonVitoriasVisitanteCtrl.text = inputs['vitoriasVisitante'] ?? '';
+      _poissonEmpatesVisitanteCtrl.text = inputs['empatesVisitante'] ?? '';
+      _poissonDerrotasVisitanteCtrl.text = inputs['derrotasVisitante'] ?? '';
 
       _poissonOddCasaCtrl.text = inputs['oddCasa'] ?? '';
       _poissonOddEmpateCtrl.text = inputs['oddEmpate'] ?? '';
@@ -6080,7 +6120,11 @@ class _TelaSobra1State extends State<TelaSobra1> with SingleTickerProviderStateM
       _poissonXGVisitanteCtrl.clear();
       _poissonGSVisitanteCtrl.clear();
       _poissonVitoriasMandanteCtrl.clear();
+      _poissonEmpatesMandanteCtrl.clear();
+      _poissonDerrotasMandanteCtrl.clear();
       _poissonVitoriasVisitanteCtrl.clear();
+      _poissonEmpatesVisitanteCtrl.clear();
+      _poissonDerrotasVisitanteCtrl.clear();
 
       // Zera odds
       _poissonOddCasaCtrl.clear();
@@ -7689,8 +7733,8 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
     final derrotasMandanteInput = _p(form['derrotasMandante'] ?? '');
     final derrotasVisitanteInput = _p(form['derrotasVisitante'] ?? '');
 
-    final empatesMandante = (empatesMandanteInput ?? max(0.0, nCasa - vitoriasMandante)).clamp(0.0, nCasa);
-    final empatesVisitante = (empatesVisitanteInput ?? max(0.0, nFora - vitoriasVisitante)).clamp(0.0, nFora);
+    final empatesMandante = (empatesMandanteInput ?? 0.0).clamp(0.0, nCasa);
+    final empatesVisitante = (empatesVisitanteInput ?? 0.0).clamp(0.0, nFora);
     final derrotasMandante = (derrotasMandanteInput ?? max(0.0, nCasa - vitoriasMandante - empatesMandante)).clamp(0.0, nCasa);
     final derrotasVisitante = (derrotasVisitanteInput ?? max(0.0, nFora - vitoriasVisitante - empatesVisitante)).clamp(0.0, nFora);
 
@@ -7882,6 +7926,14 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       'eficacia': {'casa': eficaciaCasa, 'fora': eficaciaFora},
       'formaVitorias': {
         'ativo': _poissonUsarFormaVitorias,
+        'jogosCasa': nCasa,
+        'jogosFora': nFora,
+        'vitoriasCasa': vitoriasMandante,
+        'empatesCasa': empatesMandante,
+        'derrotasCasa': derrotasMandante,
+        'vitoriasFora': vitoriasVisitante,
+        'empatesFora': empatesVisitante,
+        'derrotasFora': derrotasVisitante,
         'taxaCasa': taxaVitoriaCasa,
         'taxaFora': taxaVitoriaFora,
         'taxaEmpateCasa': taxaEmpateCasa,
@@ -7914,10 +7966,14 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
       'xgMandante': _poissonXGMandanteCtrl.text.trim(), // NOVO
       'gsMandante': _poissonGSMandanteCtrl.text.trim(),
       'vitoriasMandante': _poissonVitoriasMandanteCtrl.text.trim(),
+      'empatesMandante': _poissonEmpatesMandanteCtrl.text.trim(),
+      'derrotasMandante': _poissonDerrotasMandanteCtrl.text.trim(),
       'gmVisitante': _poissonGMVisitanteCtrl.text.trim(),
       'xgVisitante': _poissonXGVisitanteCtrl.text.trim(), // NOVO
       'gsVisitante': _poissonGSVisitanteCtrl.text.trim(),
       'vitoriasVisitante': _poissonVitoriasVisitanteCtrl.text.trim(),
+      'empatesVisitante': _poissonEmpatesVisitanteCtrl.text.trim(),
+      'derrotasVisitante': _poissonDerrotasVisitanteCtrl.text.trim(),
       'oddCasa': _poissonOddCasaCtrl.text.trim(),
       'oddEmpate': _poissonOddEmpateCtrl.text.trim(),
       'oddFora': _poissonOddForaCtrl.text.trim(),
@@ -8103,14 +8159,44 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
             ],
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _poissonVitoriasMandanteCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: "Vitórias do Mandante no recorte (Casa)",
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _poissonVitoriasMandanteCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Vitórias (Casa)",
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _poissonEmpatesMandanteCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Empates (Casa)",
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _poissonDerrotasMandanteCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Derrotas (Casa)",
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 12),
@@ -8179,14 +8265,44 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
             ],
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _poissonVitoriasVisitanteCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: "Vitórias do Visitante no recorte (Fora)",
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _poissonVitoriasVisitanteCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Vitórias (Fora)",
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _poissonEmpatesVisitanteCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Empates (Fora)",
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _poissonDerrotasVisitanteCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Derrotas (Fora)",
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
           ),
 
           const Divider(height: 30),
@@ -8204,8 +8320,8 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
           ),
           SwitchListTile(
             value: _poissonUsarFormaVitorias,
-            title: const Text("Incluir taxa de vitórias no cálculo"),
-            subtitle: const Text("Permite comparar o Poisson com e sem ajuste de forma por vitórias."),
+            title: const Text("Incluir ajuste por resultados (vitória/empate/derrota)"),
+            subtitle: const Text("Considera V/E/D no recorte para ajustar o Poisson; desative para comparar sem forma."),
             onChanged: (v) {
               setState(() => _poissonUsarFormaVitorias = v);
               _salvarConfigNivelEnfrentamento();
@@ -8449,12 +8565,35 @@ O cálcula de EV será de fato calculado em todas apostas, mas isso no momento n
                     // Display xG vs Gols Info
                     _buildEficaciaInfo(_resultadoPoisson!['eficacia']),
                     if (_resultadoPoisson!['formaVitorias'] != null)
-                      Text(
-                        ((_resultadoPoisson!['formaVitorias']['ativo'] as bool? ?? true)
-                            ? "Forma (resultados): Casa ${(100 * ((_resultadoPoisson!['formaVitorias']['taxaPontosCasa'] as num?)?.toDouble() ?? (_resultadoPoisson!['formaVitorias']['taxaCasa'] as num).toDouble())).toStringAsFixed(1)}% pts | Fora ${(100 * ((_resultadoPoisson!['formaVitorias']['taxaPontosFora'] as num?)?.toDouble() ?? (_resultadoPoisson!['formaVitorias']['taxaFora'] as num).toDouble())).toStringAsFixed(1)}% pts | Fator ${(_resultadoPoisson!['formaVitorias']['fator'] as num).toStringAsFixed(2)}"
-                            : "Forma (resultados): desativada para este cálculo"),
-                        style: const TextStyle(fontSize: 12, color: Colors.black87),
-                      ),
+                      Builder(builder: (_) {
+                        final forma = _resultadoPoisson!['formaVitorias'] as Map<String, dynamic>;
+                        final ativo = (forma['ativo'] as bool? ?? true);
+                        if (!ativo) {
+                          return const Text(
+                            "Forma (resultados): desativada para este cálculo",
+                            style: TextStyle(fontSize: 12, color: Colors.black87),
+                          );
+                        }
+
+                        String pct(dynamic n) => "${(((n as num?)?.toDouble() ?? 0.0) * 100).toStringAsFixed(1)}%";
+                        String intFmt(dynamic n) => (((n as num?)?.toDouble() ?? 0.0).toInt()).toString();
+
+                        final linhaCasa =
+                            "Casa V:${pct(forma['taxaCasa'])} (${intFmt(forma['vitoriasCasa'])}) | E:${pct(forma['taxaEmpateCasa'])} (${intFmt(forma['empatesCasa'])}) | D:${pct(forma['taxaDerrotaCasa'])} (${intFmt(forma['derrotasCasa'])})";
+                        final linhaFora =
+                            "Fora V:${pct(forma['taxaFora'])} (${intFmt(forma['vitoriasFora'])}) | E:${pct(forma['taxaEmpateFora'])} (${intFmt(forma['empatesFora'])}) | D:${pct(forma['taxaDerrotaFora'])} (${intFmt(forma['derrotasFora'])})";
+                        final resumo =
+                            "Forma (pontos): Casa ${pct(forma['taxaPontosCasa'])} | Fora ${pct(forma['taxaPontosFora'])} | Fator ${((forma['fator'] as num?)?.toDouble() ?? 1.0).toStringAsFixed(2)}";
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(linhaCasa, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            Text(linhaFora, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            Text(resumo, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                          ],
+                        );
+                      }),
                     const SizedBox(height: 8),
 
                     Text("Força Atk (Mix) — Casa: ${_fmt2(_resultadoPoisson!['lambdaCasa'])} | Fora: ${_fmt2(_resultadoPoisson!['lambdaFora'])}"),
